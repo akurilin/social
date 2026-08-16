@@ -1,0 +1,50 @@
+{
+  "entries": [
+    {
+      "api_id": "evt-nyc-two",
+      "event": {
+        "api_id": "evt-nyc-two",
+        "name": "Queens Printmaking Night",
+        "start_at": "2026-08-18T23:30:00.000Z",
+        "end_at": null,
+        "url": "queens-printmaking-night",
+        "location_type": "offline",
+        "geo_address_info": {
+          "city": "Queens",
+          "region": "New York",
+          "country": "United States",
+          "address": "Print Lab",
+          "full_address": "Print Lab, 45-10 21st St, Queens, NY 11101, USA",
+          "sublocality": "Long Island City"
+        }
+      },
+      "calendar": {"name": "Queens Art Calendar"},
+      "hosts": [],
+      "ticket_info": {"is_free": true, "is_sold_out": false, "is_near_capacity": false}
+    },
+    {
+      "api_id": "evt-after-window",
+      "event": {
+        "api_id": "evt-after-window",
+        "name": "Later Art Opening",
+        "start_at": "2026-08-30T23:30:00.000Z",
+        "end_at": null,
+        "url": "later-art-opening",
+        "location_type": "offline",
+        "geo_address_info": {
+          "city": "New York",
+          "region": "New York",
+          "country": "United States",
+          "address": "Downtown Gallery",
+          "full_address": "Downtown Gallery, New York, NY, USA",
+          "sublocality": "Lower Manhattan"
+        }
+      },
+      "calendar": {"name": "NYC Art Calendar"},
+      "hosts": [],
+      "ticket_info": {"is_free": true, "is_sold_out": false, "is_near_capacity": false}
+    }
+  ],
+  "has_more": false,
+  "next_cursor": null
+}

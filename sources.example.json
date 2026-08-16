@@ -1,0 +1,924 @@
+{
+  "schema_version": "2.2",
+  "generated": "2026-07-28",
+  "revised": "2026-08-16",
+  "description": "Agent-consumable source registry for social and cultural event discovery. The current catalog targets NYC, but each source independently declares its location, retrieval method, authentication needs, and parser expectations.",
+  "run_config": {
+    "lookahead_days": 10,
+    "timezone": "America/New_York",
+    "dedup": {
+      "strategy": "composite_key",
+      "key_fields": [
+        "specific_event_url_canonical",
+        "start_datetime_rounded_15min"
+      ],
+      "fallback_key_fields": [
+        "venue_normalized",
+        "start_datetime_rounded_15min",
+        "title_normalized"
+      ],
+      "note": "Use URL+time only for a specific event page. Calendar/index URLs represent many events and must fall back to venue+time+title. Never key on title alone."
+    },
+    "fetch_policy": {
+      "source_contract": "Each sources[].retrieval_profile selects an ordered recipe from retrieval_profiles.",
+      "fallback_rule": "Use a fallback only when the primary fails or returns an unverified zero. Record the actual method and recipe version in social.db.",
+      "zero_rule": "Zero is valid only when the profile's explicit empty signal is observed; otherwise record empty_suspicious and audit."
+    },
+    "source_activation": {
+      "enabled_default": true,
+      "disabled_rule": "A source with enabled=false remains in the catalog but is excluded from plans and manifests. disabled_reason is required and must state what would justify re-enabling it."
+    },
+    "preferences_note": "Personal fit and ranking criteria are NOT defined here. They live in the local EVENT_RANKING_CRITERIA.md file and apply only after retrieval, factual validation, and deduplication. This registry defines where and how to retrieve events. It never uses personal fit to reject a factual candidate.",
+    "extraction_pipeline": {
+      "note": "Do not accumulate raw page text in context. Store large evidence in .cache and operational results in social.db.",
+      "steps": [
+        "Create a database-backed run for every enabled source selected for this crawl.",
+        "Retrieve each source with its declared primary recipe, using fallbacks only when required.",
+        "Write large raw responses and screenshots under .cache and retain their paths and hashes.",
+        "Record each source result and every candidate in social.db before finalization.",
+        "Finalize the run so candidates are validated, deduplicated, and added to the event store."
+      ],
+      "runtime_note": "Runtime does not matter — this runs in the background. Prefer completeness over speed."
+    },
+    "etiquette": "Most of these are small independent venues and nonprofits. Don't hammer them, don't spoof a user agent, don't evade bot detection. If a site is actively blocking automation, that's an answer — move it to manual_check rather than working around it."
+  },
+  "retrieval_profiles": {
+    "luma-calendar-api-v1": {
+      "primary": {
+        "method": "http_json",
+        "recipe": "luma-calendar-api-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "luma-calendar-dom-v1"
+        },
+        {
+          "method": "browser_visual",
+          "recipe": "luma-calendar-visual-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "Successful API response with an empty entries collection.",
+      "note": "Resolve calendar_api_id, then call api.lu.ma/calendar/get-items with period=future."
+    },
+    "eventbrite-organizer-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "eventbrite-embedded-metadata-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "eventbrite-organizer-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "Organizer page explicitly reports no upcoming events."
+    },
+    "meetup-group-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "meetup-group-html-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "meetup-group-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "Group page explicitly reports zero upcoming events."
+    },
+    "http-calendar-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "structured-data-then-html-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "calendar-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "Calendar explicitly reports no upcoming events."
+    },
+    "browser-calendar-v1": {
+      "primary": {
+        "method": "browser_dom",
+        "recipe": "calendar-dom-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_visual",
+          "recipe": "calendar-visual-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "Rendered calendar explicitly reports no upcoming events."
+    },
+    "browser-directory-v1": {
+      "primary": {
+        "method": "browser_dom",
+        "recipe": "outbound-directory-dom-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_visual",
+          "recipe": "outbound-directory-visual-v1"
+        }
+      ],
+      "required_fields": [
+        "url"
+      ],
+      "empty_signal": "None: a known directory returning zero outbound targets is suspicious."
+    },
+    "authenticated-browser-v1": {
+      "primary": {
+        "method": "chrome_authenticated",
+        "recipe": "signed-in-browser-dom-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_profile",
+          "recipe": "signed-in-browser-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime"
+      ],
+      "empty_signal": "Authenticated event or invitation view explicitly reports no upcoming items."
+    },
+    "partiful-calendar-v1": {
+      "primary": {
+        "method": "calendar_connector",
+        "recipe": "partiful-calendar-import-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "chrome_authenticated",
+          "recipe": "partiful-invitations-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime"
+      ],
+      "empty_signal": "Calendar import succeeds and contains no Partiful events in the window."
+    },
+    "directory-http-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "outbound-directory-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "outbound-directory-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "url"
+      ],
+      "empty_signal": "None: a known directory returning zero outbound targets is suspicious."
+    },
+    "link-hub-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "link-hub-outbound-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "link-hub-outbound-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "url"
+      ],
+      "empty_signal": "None: zero outbound links is always suspicious."
+    },
+    "daily-html-listing-v1": {
+      "primary": {
+        "method": "http_html",
+        "recipe": "dated-post-listing-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "dated-post-dom-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "A current dated post exists and contains no dated event records in the configured window."
+    },
+    "luma-category-api-v1": {
+      "primary": {
+        "method": "http_json",
+        "recipe": "luma-category-discovery-api-v1"
+      },
+      "fallbacks": [
+        {
+          "method": "browser_dom",
+          "recipe": "luma-category-dom-v1"
+        },
+        {
+          "method": "browser_visual",
+          "recipe": "luma-category-visual-v1"
+        }
+      ],
+      "required_fields": [
+        "title",
+        "start_datetime",
+        "url"
+      ],
+      "empty_signal": "A terminal, chronologically ordered public discovery response has no NYC events in the requested date window.",
+      "note": "Use the public Luma discovery category endpoint with NYC coordinates, strict local date filtering, and cursor pagination."
+    }
+  },
+  "sources": [
+    {
+      "id": "socialfabric-nyc",
+      "title": "Social Fabric NYC — curated community directory",
+      "url": "https://www.socialfabric.nyc/",
+      "priority": 1,
+      "geo": "NYC",
+      "parse_hint": "NOT a calendar — a curated directory of ~150 groups with per-group notes from the curator (Liam Rosen). Reads cleanly with web_fetch as one large markdown document. Record the directory facts without applying personal ranking criteria. Add a group as a source only through the separate source-management workflow.",
+      "retrieval_profile": "directory-http-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because this is a discovery directory with no dated events. Re-enable if it publishes a complete dated event feed or the crawler gains a separate directory-discovery workflow."
+    },
+    {
+      "id": "reading-rhythms-manhattan",
+      "title": "Reading Rhythms — NYC calendar",
+      "url": "https://lu.ma/readingrhythms-manhattan",
+      "priority": 1,
+      "geo": "NYC (rotating)",
+      "parse_hint": "Luma calendar. Structured JSON available from Luma's data layer; no login needed. Multiple events per week. The official calendar now includes events across NYC, not only Manhattan; preserve the factual venue for each event. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "otwc-luma",
+      "title": "Olive Tree Writing Club — Luma",
+      "url": "https://lu.ma/otwc",
+      "priority": 1,
+      "geo": "NYC (rotating)",
+      "parse_hint": "Recurring writing sessions with introductions and small-group discussion. Structured Luma calendar; include companion Partiful links when the calendar points to them. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "olio",
+      "title": "Olio",
+      "url": "https://lu.ma/olios",
+      "priority": 1,
+      "geo": "NYC (rotating)",
+      "parse_hint": "Luma calendar. Mix of free and paid. Look for conversation-prompt format in description. Empty on two consecutive runs through 2026-08-02, but the organization had recent 2026 NYC events and remains active outside the city. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "volleydome",
+      "title": "Volleydome — pickup volleyball",
+      "url": "https://lu.ma/volleydome",
+      "priority": 2,
+      "geo": "Battery Park / Prospect Park",
+      "parse_hint": "Luma calendar. Seasonal — heavier in warm months. Check for skill-level tags in title. Empty on two consecutive runs through 2026-08-02, but recent 2026 pickup events confirm the group still exists. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "twc-coffee",
+      "title": "TWC Coffee",
+      "url": "https://lu.ma/twc",
+      "priority": 2,
+      "geo": "NYC (rotating cafes)",
+      "parse_hint": "Luma calendar. Low volume, so do not expect an event on every crawl. Verified 2026-07-28: Luma calendar EMPTY. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "sugary-luma",
+      "title": "Sugary — Luma calendar",
+      "url": "https://lu.ma/calendar/cal-KYNaoLq3pS000fL",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "Luma calendar. Cross-check against sugary-site — the two do not always carry the same events. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "luma-nyc-gatherings",
+      "title": "Luma — NYC Gatherings (curated by David Nebinski)",
+      "url": "https://lu.ma/nycgatherings",
+      "priority": 1,
+      "geo": "NYC",
+      "parse_hint": "Curated aggregator calendar. High overlap with other Luma sources — dedup aggressively. Primary path: the luma_calendar Python adapter reads the public calendar Event JSON-LD and accepts an empty result only when the page has an explicit empty ItemList. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "luma-nyc-arts",
+      "title": "Luma — NYC Arts category feed",
+      "url": "https://luma.com/arts",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "Luma discovery category, not an organizer calendar. The luma_category Python adapter paginates the public discovery API, applies strict NYC geography and local date-window filters, and preserves the original event and signup URLs. A filtered zero is verified only after an ordered terminal scan. Expect high volume and overlap with organizer sources. Keep the category retrieval profile as the independent audit path.",
+      "retrieval_profile": "luma-category-api-v1",
+      "adapter": "luma_category"
+    },
+    {
+      "id": "parlor-eventbrite",
+      "title": "Parlor Social Club — public Eventbrite listings",
+      "url": "https://www.eventbrite.com/o/parlor-social-club-90100457973",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "Public subset only — the full Parlor calendar lives in their app. Treat this as partial coverage. Retrieve every dated public item in the configured window, including items tagged speed-networking or dating.",
+      "retrieval_profile": "eventbrite-organizer-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the public Eventbrite organizer reports zero events and the complete calendar is app-only. Re-enable when the public organizer publishes current events or a complete public feed becomes available."
+    },
+    {
+      "id": "mundo-lingo-meetup",
+      "title": "Mundo Lingo NYC — Meetup",
+      "url": "https://www.meetup.com/mundo-lingo-new-york-city/",
+      "enabled": false,
+      "disabled_reason": "Official Meetup has no upcoming NYC events and the last local event was January 7, 2025. Re-enable only when the organizer posts a new NYC event.",
+      "priority": 1,
+      "geo": "Nolita / rotating bars",
+      "parse_hint": "Meetup group page. Venue rotates — always extract the venue field, never assume last known location.",
+      "retrieval_profile": "meetup-group-v1"
+    },
+    {
+      "id": "57-nyc",
+      "title": "57 — calendar",
+      "url": "https://www.57.nyc/calendar",
+      "priority": 1,
+      "geo": "Williamsburg",
+      "watch_for": [
+        "57 Circles",
+        "Circadian Rhythms",
+        "FAM"
+      ],
+      "parse_hint": "The gather_community_calendar Python adapter reads the anonymous structured feed used by the public 57 community calendar. It paginates event entities for the requested date window, stores only sanitized event facts, and never retains member, profile, or reaction data or raw API responses. Community-submitted third-party and non-NYC events are valid candidates; normal deduplication and the later fit-ranking phase handle overlap, geography, access restrictions, and fit. Keep the browser calendar profile as the independent visible-page audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "gather_community_calendar",
+      "api_url": "https://atlas-web-gather57-7t7d9xgg1-gather-nyc.vercel.app/api/getPosts",
+      "gather_group_id": "clfi9j47x0000rrrkyg1p32f5"
+    },
+    {
+      "id": "metrograph",
+      "title": "Metrograph",
+      "url": "https://metrograph.com/events/",
+      "priority": 1,
+      "geo": "Lower East Side (7 Ludlow St)",
+      "parse_hint": "Dedicated special-events page. The metrograph_special_events Python adapter reads only the special-event cards and does not emit ordinary showtimes. It preserves each dated showtime and direct ticket URL. A present but empty special-events section is the verified empty signal. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "metrograph_special_events"
+    },
+    {
+      "id": "anthology-film-archives",
+      "title": "Anthology Film Archives — Calendar",
+      "url": "https://ticketing.uswest.veezi.com/sessions/?siteToken=bsrxtagjxmgh2qy0b6p646xdcr",
+      "priority": 2,
+      "geo": "East Village (32 Second Ave)",
+      "parse_hint": "Official public Veezi sessions page for Anthology Film Archives. The anthology_veezi_jsonld Python adapter makes one request to this page, reads VisualArtsEvent JSON-LD, and emits one event per ticket session. It never requests purchase URLs. A zero is verified only when the page has an explicit no-sessions signal or the complete session list covers the requested end date. Anthology RSS can audit title and date counts, but it lacks complete time data. Do not fetch the Anthology calendar route because its robots rules disallow it.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "anthology_veezi_jsonld"
+    },
+    {
+      "id": "analog-film-nyc",
+      "title": "Analog Film NYC — Upcoming screenings",
+      "url": "https://analogfilmnyc.org/upcoming-screenings/",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "Citywide aggregate of celluloid screenings. The analog_film_nyc Python adapter makes one request to the official page, parses explicit dated day sections, and emits only ticketed screenings with a stated time. It keeps multi-film programs as one occurrence, uses the listed venue as host, and does not fetch outbound ticket pages. A ticketed item without an explicit time is rejected instead of inferred. A zero is verified only when dated sections cover every day in the requested window. Expect heavy overlap with Metrograph, Anthology, and Nitehawk; deduplicate normally.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "analog_film_nyc"
+    },
+    {
+      "id": "art-house-ny",
+      "title": "Art House New York — Cinema index",
+      "url": "https://www.arthouseny.org/cinemas",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "TRAP: a link index, not an event feed. Use it to resolve venue URLs — Film Forum, Roxy, Quad, IFC, BAM.",
+      "retrieval_profile": "directory-http-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because this is a cinema directory with no dated programming. Re-enable if it publishes a complete dated calendar or the crawler gains a separate venue-discovery workflow."
+    },
+    {
+      "id": "nitehawk",
+      "title": "Nitehawk Cinema",
+      "url": "https://nitehawkcinema.com",
+      "priority": 3,
+      "geo": "Williamsburg / Park Slope",
+      "parse_hint": "Dine-in cinema. The nitehawk Python adapter reads both venue coming-soon pages and the Prospect Park movie-trivia schedule. It emits every dated occurrence exposed by those configured pages for the later fit-ranking phase and does not apply personal ranking criteria. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "nitehawk"
+    },
+    {
+      "id": "brooklyn-museum-first-saturdays",
+      "title": "Brooklyn Museum — First Saturdays",
+      "url": "https://www.brooklynmuseum.org/event-series/first-saturdays",
+      "priority": 1,
+      "geo": "Prospect Heights",
+      "parse_hint": "First Saturdays subset of the Brooklyn Museum public program API. The brooklyn_museum_search Python adapter uses the exact First Saturdays subtype, validates it locally, and paginates an explicit date window. This source overlaps the all-programs source; deduplicate by event URL. API total 0 is the verified empty signal. Keep the calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "brooklyn_museum_search",
+      "adapter_config": {
+        "program_filter": "first_saturdays"
+      }
+    },
+    {
+      "id": "brooklyn-museum-programs",
+      "title": "Brooklyn Museum — All programs",
+      "url": "https://www.brooklynmuseum.org/programs",
+      "priority": 3,
+      "geo": "Prospect Heights",
+      "parse_hint": "Broad Brooklyn Museum program feed. The brooklyn_museum_search Python adapter queries the public search API with an explicit date window, start date order, and pagination. This source is a superset of First Saturdays; deduplicate by the event URL. API total 0 is the verified empty signal. Keep the calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "brooklyn_museum_search",
+      "adapter_config": {
+        "program_filter": "all_programs"
+      }
+    },
+    {
+      "id": "casa-italiana",
+      "title": "Casa Italiana Zerilli-Marimò (NYU) — Events",
+      "url": "https://www.casaitaliananyu.org/events/",
+      "priority": 1,
+      "geo": "Greenwich Village (24 W 12th St)",
+      "parse_hint": "120+ free public programs a year — lectures, screenings, concerts, and exhibitions. Nearly all are free, in English, with first-come first-served seating. The source follows an academic calendar and can be quiet in summer. Primary path: the casa_italiana Python adapter queries the official same-origin WordPress Events Calendar API with an explicit date window and pagination. A total of zero from that API is the verified empty signal. Keep the HTTP calendar profile as the independent browser audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "casa_italiana"
+    },
+    {
+      "id": "iic-new-york",
+      "title": "Istituto Italiano di Cultura New York — Events",
+      "url": "https://iicnewyork.esteri.it/en/gli_eventi/",
+      "priority": 2,
+      "geo": "Upper East Side",
+      "parse_hint": "English WordPress event listing and detail pages. The iic_new_york_events Python adapter sends an explicit date window, paginates the listing, and fetches only matching details for time, place, fee, status, and description. An explicit no-results message is the verified empty signal. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "iic_new_york_events"
+    },
+    {
+      "id": "lalliance-fiaf",
+      "title": "L'Alliance New York (formerly FIAF) — Calendar",
+      "url": "https://lallianceny.org/events/",
+      "priority": 2,
+      "geo": "Upper East Side (22 E 60th St)",
+      "parse_hint": "Current official L'Alliance New York event archive; the legacy events.fiaf.org calendar is stale. The lalliance_events Python adapter makes one request to the server-rendered archive and emits only explicit dated and timed occurrences. It does not paginate, fetch details, or use the incomplete WordPress REST data. Date-only cards are retained as missing_explicit_time rejections instead of receiving an invented time. Past-tagged cards are rejected. A structurally valid future-only archive can verify an empty window. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "lalliance_events"
+    },
+    {
+      "id": "astor-center",
+      "title": "Astor Center — classes and tastings",
+      "url": "https://www.astorcenternyc.com/calendar.aspx",
+      "priority": 1,
+      "geo": "NoHo (above Astor Wines, 399 Lafayette)",
+      "parse_hint": "Paid classes, typically 6:30pm, 2 hours. Extract price. Primary path: the astor_center Python adapter discovers class pages from calendar.aspx, reads Event JSON-LD on each detail page, and extracts the visible ticket price. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "astor_center"
+    },
+    {
+      "id": "astor-wines-tastings",
+      "title": "Astor Wines & Spirits — Free tastings & events",
+      "url": "https://www.astorwines.com/tastingevents.aspx",
+      "priority": 1,
+      "geo": "NoHo (399 Lafayette)",
+      "parse_hint": "Free recurring in-store tastings. Distinct from astor-center paid classes; check both. Primary path: the astor_wines_tastings Python adapter discovers event.aspx detail pages and extracts their visible date, time, availability, and free status. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "astor_wines_tastings"
+    },
+    {
+      "id": "book-events-nyc",
+      "title": "Book Events NYC",
+      "url": "https://bookevents.nyc/",
+      "priority": 1,
+      "geo": "NYC (filterable by neighborhood)",
+      "parse_hint": "NOTE: aggregator — high yield per fetch but heavy duplication against sources already checked. Aggregates 80+ bookstores and literary venues and has map, calendar, neighbourhood, and venue views. Retrieve every dated item in the configured NYC scope and window, then deduplicate normally. Do not filter by format or expected fit. Needs a browser.",
+      "retrieval_profile": "browser-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the site blocks this crawler and exposes no permitted structured event feed. Re-enable when automated access is permitted or the site publishes a usable public RSS, ICS, or API feed."
+    },
+    {
+      "id": "pioneer-works",
+      "title": "Pioneer Works — Calendar",
+      "url": "https://pioneerworks.org/calendar",
+      "priority": 2,
+      "geo": "Red Hook",
+      "parse_hint": "The pioneer_works_next_data Python adapter reads the server-rendered Next.js calendar collection, filters the date window before detail requests, and emits dated programs and classes. Its supported occurrence schema does not include exhibition date ranges or undated records. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "pioneer_works_next_data"
+    },
+    {
+      "id": "lightning-society",
+      "title": "Lightning Society",
+      "url": "https://www.lightningsociety.com/",
+      "priority": 2,
+      "geo": "Bushwick",
+      "parse_hint": "Opens to the public once or twice a month, so do not expect an event on every crawl. Watch for potlucks and open mics.",
+      "retrieval_profile": "http-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the public site has no dated event calendar or feed. Re-enable when Lightning Society publishes current dates through a public calendar or structured feed."
+    },
+    {
+      "id": "the-fifth-place",
+      "title": "The Fifth Place",
+      "url": "https://www.thefifthplace.org/",
+      "priority": 2,
+      "geo": "NYC (rotating venues)",
+      "parse_hint": "Invitation-only participatory dinner theater. Site may only expose a signup/waitlist rather than a public calendar — if no events parse, report the signup state rather than a null result.",
+      "retrieval_profile": "http-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the public site exposes only a private application form and no dated schedule. Re-enable when it publishes public event dates or a supported calendar feed."
+    },
+    {
+      "id": "drawing-room",
+      "title": "Drawing Room",
+      "url": "https://www.nycdrawingroom.com/all-events",
+      "priority": 2,
+      "geo": "Midtown / Brooklyn",
+      "parse_hint": "Squarespace page with a Momence host schedule. The reusable momence_host Python adapter reads host 49694 through the public read-only API with a date window and pagination. It preserves location, facilitator, price, capacity, cancellation, and booking URL. API totalCount 0 is the verified empty signal. Keep the browser calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "momence_host",
+      "momence_host_id": 49694
+    },
+    {
+      "id": "secret-riso-club",
+      "title": "Secret Riso Club — Calendar",
+      "url": "https://secretrisoclub.com/Calendar",
+      "priority": 3,
+      "geo": "Bushwick",
+      "parse_hint": "The secret_riso_calendar Python adapter reads the official Cargo Calendar page in one request and parses only its embedded Upcoming Events and Workshops section. It emits only explicit dated and timed occurrences, ignores the Past Events section, and rejects date-only ranges instead of inventing a time. Ordered upcoming/past markers and an empty upcoming section are the verified-empty signal. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "secret_riso_calendar"
+    },
+    {
+      "id": "studio45",
+      "title": "Studio45 — Calendar",
+      "url": "https://www.studio45bk.com/calendar",
+      "priority": 3,
+      "geo": "Bushwick",
+      "parse_hint": "Workshop and event space. Paid. Closure was not confirmed on 2026-08-02: the official site remains live and says workshops will resume in spring, but carries no dated calendar. Treat another zero as verified only if that message remains.",
+      "retrieval_profile": "http-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the official domain is disconnected and returns Wix domain errors. Re-enable when the official site and dated calendar are restored."
+    },
+    {
+      "id": "reccreate-collective",
+      "title": "RecCreate Collective",
+      "url": "https://luma.com/reccreatecollective",
+      "priority": 3,
+      "geo": "Clinton Hill",
+      "parse_hint": "Official Luma calendar. The luma_calendar Python adapter reads public Event JSON-LD and filters the requested date window. It treats only an explicit empty ItemList as verified empty. Events are usually paid and take place at Drawing Room locations. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "a-third-place",
+      "title": "A Third Place",
+      "url": "https://athirdplace.xyz/",
+      "priority": 3,
+      "geo": "NYC (pop-up)",
+      "parse_hint": "Pop-up workshops, rotating locations. Always extract venue.",
+      "retrieval_profile": "http-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the official gatherings inventory is empty and current announcements depend on social media. Re-enable when the site publishes dated event listings or a stable public calendar."
+    },
+    {
+      "id": "ny-philosophy-club",
+      "title": "New York Philosophy Club",
+      "url": "https://luma.com/philosophy",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "Official Luma calendar for New York Philosophy Club. The luma_calendar Python adapter reads public Event JSON-LD and filters the requested date window. Events use a rotating small-group discussion format. Keep the Luma retrieval profile as the independent audit and fallback path.",
+      "retrieval_profile": "luma-calendar-api-v1",
+      "adapter": "luma_calendar"
+    },
+    {
+      "id": "carreau-club",
+      "title": "Carreau Club — pétanque",
+      "url": "https://www.carreauclub.com/",
+      "priority": 3,
+      "geo": "Industry City",
+      "parse_hint": "The carreau_club_friday_melee Python adapter reads the official home page in one request. It requires the full current source evidence for the free Friday 7–10 PM open melee tournament and creates only Friday occurrences inside the requested window. It does not infer dates from business hours. Missing or changed schedule evidence fails loudly instead of returning an empty result. Keep the HTTP calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "carreau_club_friday_melee"
+    },
+    {
+      "id": "sugary-site",
+      "title": "Sugary — events site",
+      "url": "https://www.sugarynyc.com",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "Sugary application backed by a public event API. The sugary_events_api Python adapter paginates the complete collection, rejects inactive rows, and filters dates locally because API date parameters are not reliable. It preserves stable event IDs and RSVP URLs. Deduplicate against sugary-luma. A successful zero-total API collection is the verified empty signal. Keep the site profile as the independent audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "sugary_events_api",
+      "api_url": "https://sweetlist-production.up.railway.app/api/events"
+    },
+    {
+      "id": "borderless",
+      "title": "BORDERLESS",
+      "url": "https://linktr.ee/borderlessclub",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "TRAP: this is a Linktree, not an event feed — it holds NO event data. Enumerate the outbound links and follow them to whatever ticketing/calendar platform they point at, and re-resolve every run because Linktree targets change without notice. This is the source most likely to silently return nothing while appearing to succeed. The email list is the more reliable path to the same organisation, but that route is currently blocked (no Gmail connector).",
+      "retrieval_profile": "link-hub-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because its changing Linktree targets span several platforms and no one target gives complete coverage. Re-enable when it has one complete stable calendar or a validated link-hub adapter exists."
+    },
+    {
+      "id": "the-skint",
+      "title": "The Skint",
+      "url": "https://www.theskint.com/",
+      "priority": 2,
+      "geo": "NYC",
+      "parse_hint": "NOTE: daily dated-post format with high volume. Retrieve every factual event in the configured window. Do not filter by format or expected fit during retrieval.",
+      "retrieval_profile": "daily-html-listing-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because events are embedded in complex editorial prose and no reliable structured feed exists. Re-enable when a validated parser exists or the site publishes structured event records."
+    },
+    {
+      "id": "akin",
+      "title": "akin — creative spaces directory",
+      "url": "https://www.discoverakin.com/",
+      "enabled": false,
+      "disabled_reason": "Official FAQ says Akin is launching in Ann Arbor and only plans to expand to NYC. Re-enable when the official directory lists NYC availability.",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "NOTE: aggregator — directory of creative spaces and events. Use for DISCOVERING venues to add to this registry, not as a dated event feed. Needs a browser.",
+      "retrieval_profile": "browser-directory-v1"
+    },
+    {
+      "id": "nyc-run-clubs",
+      "title": "NYC Run Clubs directory",
+      "url": "https://nycrunclubs.com/",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "TRAP: a directory of ORGANISATIONS, not a calendar — it contains no dates. Record directory facts without applying personal ranking criteria. Add clubs as sources only through the separate source-management workflow.",
+      "retrieval_profile": "directory-http-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because its weekly schedule data has not been updated since January 2025 and has no active-status proof. Re-enable when current schedules are verified or a dated public feed is available."
+    },
+    {
+      "id": "nyc-for-free-run-clubs",
+      "title": "NYC for Free — Free run clubs list",
+      "url": "https://www.nycforfree.co/runclubs",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "TRAP: a directory of ORGANISATIONS, not a calendar — no dates. More than 200 clubs are tagged by neighbourhood and affinity. Record directory facts without applying personal ranking criteria. Add clubs as sources only through the separate source-management workflow.",
+      "retrieval_profile": "directory-http-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the directory is old and lacks exact times, meeting places, and event URLs. Re-enable when it publishes current complete schedules."
+    },
+    {
+      "id": "nyrr-clubs",
+      "title": "NYRR — Run with a club",
+      "url": "https://www.nyrr.org/getinvolved/club",
+      "priority": 3,
+      "geo": "NYC metro",
+      "parse_hint": "TRAP: a directory of ORGANISATIONS, not a calendar — no dates. Official NYRR club directory, reference only.",
+      "retrieval_profile": "directory-http-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because this is a club directory rather than an event feed, and production access is Queue-it protected. Re-enable when an accessible dated club-event feed is available."
+    },
+    {
+      "id": "partiful",
+      "title": "Partiful — private invitations",
+      "url": "https://partiful.com/",
+      "priority": 1,
+      "geo": "NYC",
+      "auth": {
+        "required": true,
+        "type": "session_cookie",
+        "login_domain": "partiful.com",
+        "note": "Invitations are private by definition. No public surface exists for the operator's own invites."
+      },
+      "parse_hint": "Read the operator's own invite list. Do NOT RSVP automatically. Retrieve all dated invitations in the configured window without applying personal ranking criteria.",
+      "retrieval_profile": "partiful-calendar-v1",
+      "enabled": false,
+      "disabled_reason": "Disabled because the source requires an authenticated private-invitation session and has no complete anonymous substitute. Re-enable when a supported authenticated read-only integration is available."
+    },
+    {
+      "id": "maxwell-social",
+      "title": "Maxwell Social",
+      "url": "https://www.maxwellsocial.com/",
+      "enabled": false,
+      "disabled_reason": "Private members club requiring an application and four interviews; the operator has no membership access. Re-enable only after membership is granted or a public event feed becomes available.",
+      "priority": 2,
+      "geo": "Tribeca",
+      "auth": {
+        "required": true,
+        "type": "session_cookie",
+        "login_domain": "maxwellsocial.com",
+        "note": "Members-only. Only usable if the operator's application is accepted."
+      },
+      "parse_hint": "Inactive until membership is granted. Agent should no-op and log rather than error if login fails.",
+      "retrieval_profile": "authenticated-browser-v1"
+    },
+    {
+      "id": "endorphins-nyc",
+      "title": "Endorphins Running — NYC",
+      "url": "https://app.endorphinsrunning.com/city/67756fca7bf8630b1b4da548",
+      "priority": 3,
+      "geo": "NYC",
+      "parse_hint": "Free group runs. Primary path: the endorphins_city_api Python adapter derives the city ID from this URL and reads the public city API. It keeps only active events whose city ID matches this source. Keep the browser calendar profile as the independent audit and fallback path.",
+      "retrieval_profile": "browser-calendar-v1",
+      "adapter": "endorphins_city_api"
+    },
+    {
+      "id": "out-there-nyc",
+      "title": "Out There — Straight NYC Singles Events",
+      "url": "https://outthere.nyc/?orientation=straight",
+      "priority": 2,
+      "geo": "NYC and nearby New Jersey",
+      "parse_hint": "Primary execution path: the out_there Python adapter. It uses HTTP only. Keep orientation=straight on every paginated request and follow page=N until there is no Next page. Listing pages return 24 event URLs in ItemList JSON-LD. Detail pages provide Event JSON-LD; the adapter also reads the small header tag area for factual age limits. Preserve the Out There event URL, direct signup URL, organizer, description, availability, precise venue, and factual age limits. Treat an explicit zero total or a verified zero inside the configured date window as empty. Expect overlap with organizer and Eventbrite sources; deduplicate normally. The browser calendar recipe remains the independent audit and fallback path.",
+      "retrieval_profile": "http-calendar-v1",
+      "adapter": "out_there"
+    }
+  ],
+  "manual_check": {
+    "description": "Instagram-only sources. Deliberately excluded from automated runs: Instagram walls content behind login, actively detects automation, and buries event details in captions and expiring Stories. Repeated automated access risks rate-limiting or flagging the operator's personal account for low structured yield. Check these by hand when useful.",
+    "automate": false,
+    "items": [
+      {
+        "id": "gaia-music-collective",
+        "title": "Gaia Music Collective",
+        "url": "https://www.instagram.com/gaiamusiccollective/?hl=en",
+        "interest_tags": [
+          "music"
+        ]
+      },
+      {
+        "id": "filmmaker-friday",
+        "title": "Filmmaker Friday NYC",
+        "url": "https://www.instagram.com/filmmakerfridaynyc/",
+        "interest_tags": [
+          "film"
+        ]
+      },
+      {
+        "id": "green-tile-social-club",
+        "title": "Green Tile Social Club (Mahjong)",
+        "url": "https://www.instagram.com/greentilesocialclub/",
+        "interest_tags": [
+          "games",
+          "social"
+        ]
+      },
+      {
+        "id": "pickup-pigeons",
+        "title": "Pickup Pigeons",
+        "url": "https://www.instagram.com/pickuppigeons/",
+        "interest_tags": [
+          "social"
+        ]
+      },
+      {
+        "id": "dinner-with-friends-nyc",
+        "title": "Dinner With Friends NYC",
+        "url": "https://www.instagram.com/dinnerwithfriendsnyc/",
+        "interest_tags": [
+          "food",
+          "social"
+        ]
+      },
+      {
+        "id": "57-instagram",
+        "title": "57 — Instagram",
+        "url": "https://instagram.com/57.nyc",
+        "interest_tags": [
+          "music",
+          "nightlife"
+        ],
+        "note": "Redundant — use 57-nyc instead."
+      }
+    ]
+  },
+  "removed": {
+    "description": "Evaluated and rejected. Recorded here so they are not re-added by a future pass.",
+    "items": [
+      {
+        "id": "222",
+        "title": "222",
+        "url": "https://222.place/",
+        "reason": "App-only, application-and-matching model. The operator applies and their team assigns participants to events; there is no browsable event list to extract or act on. Homepage shows a single teaser. No agent value."
+      },
+      {
+        "id": "parlor-apply",
+        "title": "Parlor Social Club — apply page",
+        "url": "https://parlor.social/",
+        "reason": "Marketing and application page only, zero event data. Full calendar lives behind the mobile app. Superseded by parlor-eventbrite, which exposes a public subset."
+      },
+      {
+        "id": "dishcourse",
+        "title": "Dishcourse",
+        "url": "https://chat.whatsapp.com/Gfsq8yWn2UO6ek7tmneJUZ",
+        "reason": "WhatsApp group. Events arrive as chat messages in an invite-only thread; not addressable by URL. Join manually and check the thread by hand."
+      },
+      {
+        "id": "fotografiska-nyc",
+        "title": "Fotografiska New York",
+        "url": null,
+        "reason": "CLOSED. Operated in Gramercy from December 2019 until September 29, 2024. Announced a relocation to an unannounced site; status unconfirmed. Do not re-add without verifying a new location."
+      },
+      {
+        "id": "luma-nyc-city",
+        "title": "Luma — NYC city feed",
+        "url": "https://lu.ma/nyc",
+        "reason": "Verified 2026-07-28: overwhelmingly tech/founder content (fintech run club, MCP release party, WorkOS showcase, Andrew Yeung founder dinner). Fails Alex's hard exclusions on nearly every item. Removed at his explicit instruction. Was previously priority 1."
+      },
+      {
+        "id": "nothingtodonyc",
+        "title": "Nothing To Do NYC",
+        "url": "https://www.nothingtodonyc.com/",
+        "reason": "Verified 2026-07-28: domain does not resolve. No web presence found via search."
+      }
+    ]
+  },
+  "run_contract": {
+    "description": "Data that each run must retain for inspection in the web control center.",
+    "fields": [
+      "title",
+      "host",
+      "url",
+      "start_datetime",
+      "end_datetime",
+      "venue_name",
+      "neighborhood",
+      "address",
+      "price",
+      "is_free",
+      "rsvp_required",
+      "source_id",
+      "confidence"
+    ],
+    "constraints": [
+      "Read-only. Never RSVP, purchase, join, or submit a form on the operator's behalf.",
+      "Never enter payment details or credentials.",
+      "Retain an explicit rejection for candidates that cannot be ingested for a factual or validation reason. Never use personal ranking criteria as a retrieval rejection reason.",
+      "Log every source that returned zero results, distinguishing 'no events in window' from 'fetch failed' from 'auth required'.",
+      "Never omit a source from the per-source accounting records."
+    ],
+    "per_source_accounting": {
+      "required": true,
+      "note": "MANDATORY. The operator uses this as the feedback loop on which sources are worth keeping. Every source attempted must appear with an explicit count and state. A source that is silently absent is indistinguishable from one that returned nothing, which destroys the signal.",
+      "emit_row_for": "every enabled source selected for this run, including ones that failed or returned nothing",
+      "columns": [
+        "source_id",
+        "events_found",
+        "events_kept",
+        "state",
+        "detail"
+      ],
+      "states": {
+        "ok": "Fetched and parsed successfully. events_kept means accepted for ingestion before fit ranking. Report events_found and events_kept even when both are 0.",
+        "ok_via_fallback": "Primary recipe failed or returned an unverified zero; a fallback succeeded and validated.",
+        "empty_verified": "Recipe succeeded and its explicit empty signal was observed.",
+        "empty_suspicious": "Extraction returned zero without its explicit empty signal. Run a fallback and audit.",
+        "parse_failed": "Fetched content but extracted nothing — the site likely changed structure. REPORT LOUDLY; this is the failure that hides itself.",
+        "validation_failed": "Candidates were parsed but required fields were missing or implausible.",
+        "fetch_failed": "Network/HTTP error. Include the error. Retry once before reporting.",
+        "auth_required": "Session expired or absent. Do not retry-loop against a login form.",
+        "blocked": "Structurally unreachable in this environment, e.g. the Gmail-dependent inbox sources."
+      },
+      "also_retain": [
+        "Total candidates across all sources, before and after deduplication.",
+        "Source state changes since the previous run.",
+        "New hosts seen repeatedly that are not yet in this registry."
+      ]
+    },
+    "ranking_note": "After retrieval, factual validation, and deduplication, rank each event against the local EVENT_RANKING_CRITERIA.md file. Ranking is not a computed score. There is deliberately no boost_score field because the criteria are prose and can change. A fit decision never changes retrieval results or ingestion counts."
+  }
+}

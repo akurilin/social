@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Event Source"
+  short_description: "Add or update an event crawl source"
+  default_prompt: "Use $add-source to add an event source to the social crawler."

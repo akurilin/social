@@ -1,0 +1,22 @@
+{
+  "payload": [
+    {
+      "id": 141759470,
+      "hostId": 49694,
+      "sessionName": "[Gathering] Cowork Corner",
+      "level": "Bring a creative project and work together.",
+      "startsAt": "2026-08-20T14:00:00.000Z",
+      "endsAt": "2026-08-20T17:00:00.000Z",
+      "link": "https://momence.com/s/141759470",
+      "location": "Drawing Room Midtown",
+      "fixedTicketPrice": 25,
+      "freeEvent": false,
+      "capacity": 12,
+      "ticketsSold": 3,
+      "remainingSpots": 9,
+      "teacher": "Zoe Wallace",
+      "isCancelled": false
+    }
+  ],
+  "pagination": {"page": 0, "pageSize": 100, "totalCount": 2}
+}

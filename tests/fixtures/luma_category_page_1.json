@@ -1,0 +1,54 @@
+{
+  "entries": [
+    {
+      "api_id": "evt-nyc-one",
+      "event": {
+        "api_id": "evt-nyc-one",
+        "name": "Brooklyn Sculpture Salon",
+        "start_at": "2026-08-16T23:00:00.000Z",
+        "end_at": "2026-08-17T01:00:00.000Z",
+        "url": "brooklyn-sculpture-salon",
+        "location_type": "offline",
+        "geo_address_info": {
+          "city": "Brooklyn",
+          "region": "New York",
+          "country": "United States",
+          "address": "Studio 17",
+          "full_address": "Studio 17, 123 Atlantic Ave, Brooklyn, NY 11201, USA",
+          "sublocality": "Brooklyn Heights"
+        }
+      },
+      "calendar": {"name": "Brooklyn Art Calendar"},
+      "hosts": [{"name": "Art Host"}],
+      "ticket_info": {
+        "price": {"cents": 2500, "currency": "usd"},
+        "is_free": false,
+        "is_sold_out": false,
+        "is_near_capacity": true
+      }
+    },
+    {
+      "api_id": "evt-non-nyc",
+      "event": {
+        "api_id": "evt-non-nyc",
+        "name": "Jersey City Studio Visit",
+        "start_at": "2026-08-17T00:00:00.000Z",
+        "end_at": null,
+        "url": "jersey-city-studio-visit",
+        "location_type": "offline",
+        "geo_address_info": {
+          "city": "Jersey City",
+          "region": "New Jersey",
+          "country": "United States",
+          "address": "Gallery NJ",
+          "full_address": "Gallery NJ, Jersey City, NJ, USA"
+        }
+      },
+      "calendar": {"name": "Regional Art Calendar"},
+      "hosts": [],
+      "ticket_info": {"is_free": true, "is_sold_out": false, "is_near_capacity": false}
+    }
+  ],
+  "has_more": true,
+  "next_cursor": "cursor-two"
+}

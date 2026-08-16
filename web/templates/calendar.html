@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, fit_filter %}
+{% block content %}
+<header class="calendar-page-head">
+  <div class="calendar-heading">
+    <p class="eyebrow">Event calendar</p>
+    <div><h1>{{ month_label }}</h1><span>{{ event_count }} events</span></div>
+  </div>
+  <nav class="month-nav" aria-label="Month navigation">
+    <a class="button secondary" href="{{ today_url }}">Today</a>
+    <a class="icon-button" href="{{ previous_url }}" aria-label="Previous month">‹</a>
+    <a class="icon-button" href="{{ next_url }}" aria-label="Next month">›</a>
+  </nav>
+  <div class="view-switch" aria-label="Event view">
+    <a class="button secondary" href="{{ list_url }}">List</a>
+    <span class="button primary" aria-current="page">Calendar</span>
+  </div>
+</header>
+
+<div class="calendar-filter-row">
+  <form class="calendar-filters" method="get" data-auto-submit>
+    <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+    {{ fit_filter(rank) }}
+    <label class="calendar-source"><span>Source</span><select name="source_id"><option value="">Any source</option>{% for value, label in source_options %}<option value="{{ value }}" {% if source_id == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  </form>
+  <div class="calendar-legend" aria-label="Fit colors">
+    <span class="legend-high">High</span><span class="legend-medium">Medium</span><span class="legend-low">Low</span><span class="legend-unranked">Unranked</span>
+  </div>
+</div>
+
+<section class="calendar-panel" aria-label="{{ month_label }} calendar" style="--calendar-weeks: {{ weeks|length }}">
+  <div class="calendar-scroll">
+    <div class="calendar-grid calendar-weekdays" aria-hidden="true">
+      {% for weekday in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}<div>{{ weekday }}</div>{% endfor %}
+    </div>
+    <div class="calendar-body">
+    {% for week in weeks %}
+      <div class="calendar-grid calendar-week">
+      {% for cell in week %}
+        <section class="calendar-day{% if not cell.in_month %} outside-month{% endif %}{% if cell.is_past %} past{% endif %}{% if cell.is_today %} today{% endif %}" data-date="{{ cell.iso }}" aria-label="{{ cell.date.strftime('%A, %B %-d, %Y') }}, {{ cell.events|length }} events">
+          <header class="calendar-day-head">
+            <time datetime="{{ cell.iso }}">{{ cell.day }}</time>
+          </header>
+          <div class="calendar-day-events">
+          {% for event in cell.events[:3] %}
+            <a class="calendar-event rank-{{ event.rank or 'unranked' }}" href="/events/{{ event.id }}" title="{{ event.start[11:16] if event.start|length >= 16 else '' }} {{ event.title }} — {{ event.venue or event.neighborhood or 'Location unknown' }}">
+              <time>{{ event.start[11:16] if event.start|length >= 16 else '' }}</time><strong><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</strong>
+            </a>
+          {% endfor %}
+          {% if cell.events|length > 3 %}
+            <button class="calendar-more" type="button" data-day-dialog="day-{{ cell.iso }}">+{{ cell.events|length - 3 }} more</button>
+          {% endif %}
+          </div>
+          {% if cell.events|length > 3 %}
+          <dialog class="day-dialog" id="day-{{ cell.iso }}">
+            <div class="day-dialog-head">
+              <div><p class="eyebrow">{{ cell.date.strftime('%A') }}</p><h2>{{ cell.date.strftime('%B %-d') }}</h2><span>{{ cell.events|length }} events</span></div>
+              <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="day-dialog-events">
+            {% for event in cell.events %}
+              <a class="dialog-event rank-{{ event.rank or 'unranked' }}" href="/events/{{ event.id }}">
+                <time>{{ event.start[11:16] if event.start|length >= 16 else '' }}</time>
+                <span><strong><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</strong><small>{{ event.neighborhood or event.venue or event.source_id or 'Location unknown' }}</small></span>
+                {{ badge(event.rank or 'unranked') }}
+              </a>
+            {% endfor %}
+            </div>
+          </dialog>
+          {% endif %}
+        </section>
+      {% endfor %}
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,52 @@
+{
+  "posts": [
+    {
+      "id": "post-entity-url",
+      "content": "First community plan\nA factual description.",
+      "entity": {
+        "id": "entity-1",
+        "type": "EVENT",
+        "url": "https://events.example/first",
+        "startTime": "2026-08-18T23:30:00.000Z",
+        "endTime": "2026-08-19T01:00:00.000Z",
+        "address": "100 Example Street, Brooklyn, NY"
+      },
+      "links": [
+        {
+          "link": "https://tickets.example/first",
+          "title": "First Event"
+        }
+      ],
+      "user": {
+        "email": "not-retained@example.test",
+        "phone": "212-555-0199",
+        "bio": "private fixture text"
+      },
+      "reactions": [
+        {
+          "type": "INTERESTED",
+          "userId": "synthetic-member-id"
+        }
+      ]
+    },
+    {
+      "id": "post-link-url",
+      "content": "Second community plan\nA factual description.",
+      "entity": {
+        "id": "entity-2",
+        "type": "EVENT",
+        "url": null,
+        "startTime": "2026-08-20T22:00:00.000Z",
+        "address": "200 Example Avenue, New York, NY"
+      },
+      "links": [
+        {
+          "link": "https://tickets.example/second",
+          "title": "Second Event"
+        }
+      ]
+    }
+  ],
+  "startCursor": "page-1-start",
+  "endCursor": "cursor-page-2"
+}

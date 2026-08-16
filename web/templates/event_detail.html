@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="breadcrumb"><a href="/events">Events</a><span>/</span>{{ event.id }}</div>
+    <div class="event-title-row">
+      <h1><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</h1>
+      {% if event.url %}<a class="button secondary original-event-link" href="{{ event.url }}" target="_blank" rel="noopener">View original event <span aria-hidden="true">↗</span></a>{% endif %}
+    </div>
+    <p class="lede">{{ event.start[:16]|replace('T', ' ') }} · {{ event.neighborhood or event.venue or 'Location unknown' }} · {{ event.host or 'Host unknown' }}</p>
+  </div>
+  <div class="head-badges">
+    {{ badge(event.rank or 'unranked') }}
+    {% if event.status and event.status != 'active' %}{{ badge(event.status) }}{% endif %}
+  </div>
+</header>
+
+<div class="detail-main">
+    <section class="panel read-only-section">
+      <div class="section-head"><div><p class="eyebrow">Crawler record</p><h2>Event details</h2></div><span class="section-note">First seen {{ event.first_seen }} · Last seen {{ event.last_seen }}</span></div>
+      <dl class="read-only-grid">
+        <div><dt>Starts</dt><dd><time datetime="{{ event.start }}">{{ event.start[:16]|replace('T', ' ') }}</time></dd></div>
+        {% if event.end %}<div><dt>Ends</dt><dd><time datetime="{{ event.end }}">{{ event.end[:16]|replace('T', ' ') }}</time></dd></div>{% endif %}
+        <div><dt>Host</dt><dd>{{ event.host or 'Unknown' }}</dd></div>
+        <div><dt>Venue</dt><dd>{{ event.venue or 'Unknown' }}</dd></div>
+        <div><dt>Neighborhood</dt><dd>{{ event.neighborhood or 'Unknown' }}</dd></div>
+        <div><dt>Address</dt><dd>{{ event.address or 'Unknown' }}</dd></div>
+        {% if event.explicit_age_min or event.explicit_age_max %}<div><dt>Explicit age range</dt><dd>{{ event.explicit_age_min or '?' }}–{{ event.explicit_age_max or '?' }}</dd></div>{% endif %}
+        <div><dt>Price</dt><dd>{{ 'Free' if event.is_free else (event.price or 'Unknown') }}</dd></div>
+        <div><dt>Source</dt><dd><a href="/source?source_id={{ event.source_id|urlencode }}">{{ event.source_id or 'Unknown' }}</a></dd></div>
+        {% if event.signup_url %}<div class="full"><dt>Direct signup</dt><dd><a href="{{ event.signup_url }}" target="_blank" rel="noopener">Open signup page <span aria-hidden="true">↗</span></a></dd></div>{% endif %}
+        <div class="full"><dt>Original links</dt><dd class="event-alias-links">{% for link in event.urls %}<a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.source_id or 'Event page' }}{% if link.is_preferred %} · preferred{% endif %} <span aria-hidden="true">↗</span></a>{% else %}<span class="muted">No event-specific link was collected.</span>{% endfor %}</dd></div>
+        <div class="full"><dt>Description</dt><dd class="read-only-copy">{{ event.description or 'No description was collected.' }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel read-only-section">
+      <div class="section-head"><div><p class="eyebrow">Crawler assessment</p><h2>Fit assessment</h2></div>{% if event.ranked_on %}<span class="section-note">Ranked {{ event.ranked_on }}</span>{% endif %}</div>
+      <dl class="read-only-grid">
+        <div><dt>Fit</dt><dd>{{ badge(event.rank or 'unranked') }}</dd></div>
+        {% if event.capacity_flag %}<div><dt>Capacity note</dt><dd>{{ event.capacity_flag }}</dd></div>{% endif %}
+        {% if event.catch %}<div><dt>Catch</dt><dd>{{ event.catch }}</dd></div>{% endif %}
+        <div class="full"><dt>Fit note</dt><dd class="read-only-copy">{{ event.fit_note or 'No fit note was recorded.' }}</dd></div>
+        <div class="full"><dt>Format tags</dt><dd class="tag-list">{% for tag in event.format_tags %}<span>{{ tag }}</span>{% else %}<span class="muted">No format tags were recorded.</span>{% endfor %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">Provenance</p><h2>Discovery history</h2></div><span class="section-note">{{ event.discoveries|length }} records</span></div>
+      <div class="discovery-list compact-list">{% for item in event.discoveries %}<details class="discovery"><summary><span class="discovery-main"><strong>{{ item.source_id }}</strong><small>Run {{ item.run_id }} · {{ item.display_start[:16]|replace('T', ' ') if item.display_start else 'No date' }}</small></span>{{ badge(item.outcome) }}<a class="button tiny" href="/runs/{{ item.run_id }}" onclick="event.stopPropagation()">Open run</a></summary><div class="discovery-body"><pre>{{ item.raw|tojson(indent=2) }}</pre></div></details>{% else %}<div class="empty">No discovery history points to this event.</div>{% endfor %}</div>
+    </section>
+</div>
+{% endblock %}

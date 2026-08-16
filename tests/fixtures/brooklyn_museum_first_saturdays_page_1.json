@@ -1,0 +1,6 @@
+{
+  "metadata": {"total": 1, "pages": 1, "pageNumber": 1, "maxPages": 416},
+  "data": [
+    {"source": "sanity", "sourceId": "bm-101", "type": "event", "url": "https://www.brooklynmuseum.org/programs/first-saturday/08-22-2026", "title": "First Saturday: Night at the Museum", "description": "Music, art, and performances.", "subtype": ["First Saturdays", "Free", "After-hours"], "museumLocation": {"name": "Great Hall"}, "startDate": "2026-08-22T22:00:00.000Z", "endDate": "2026-08-23T02:00:00.000Z"}
+  ]
+}

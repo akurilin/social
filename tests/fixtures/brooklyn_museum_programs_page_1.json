@@ -1,0 +1,6 @@
+{
+  "metadata": {"total": 2, "pages": 2, "pageNumber": 1, "maxPages": 416},
+  "data": [
+    {"source": "sanity", "sourceId": "bm-100", "type": "event", "url": "https://www.brooklynmuseum.org/programs/open-studio/08-20-2026", "title": "Open Studio", "summary": "Make art with Museum educators.", "subtype": ["Free", "Art-making"], "museumLocation": {"name": "Education Center"}, "startDate": "2026-08-20T22:00:00.000Z", "endDate": "2026-08-20T23:30:00.000Z"}
+  ]
+}

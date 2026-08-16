@@ -1,0 +1,34 @@
+{
+  "events": [
+    {
+      "id": 810,
+      "title": "Neighborhood Supper",
+      "description": "A shared table for new neighbors.",
+      "event_date": "2026-08-20T00:00:00.000Z",
+      "event_time": "6:30 PM",
+      "venue": "Community Table",
+      "neighborhood": "East Village",
+      "borough": "Manhattan",
+      "cost_type": "Free",
+      "rsvp_url": "https://tickets.example/supper",
+      "is_active": true
+    },
+    {
+      "id": 811,
+      "title": "Old Event",
+      "event_date": "2026-07-20T00:00:00.000Z",
+      "event_time": "7 PM",
+      "rsvp_url": "https://tickets.example/old",
+      "is_active": true
+    },
+    {
+      "id": 812,
+      "title": "Inactive Event",
+      "event_date": "2026-08-21T00:00:00.000Z",
+      "event_time": "7 PM",
+      "rsvp_url": "https://tickets.example/inactive",
+      "is_active": false
+    }
+  ],
+  "pagination": {"page": 1, "limit": 100, "total": 3, "totalPages": 1, "hasMore": false}
+}

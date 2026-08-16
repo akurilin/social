@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, metric %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="breadcrumb"><a href="/sources">Sources</a><span>/</span>{{ source.id }}</div>
+    <h1>{{ source.title }}</h1>
+    <p class="lede">{{ source.parse_hint or 'No parsing notes are recorded.' }}</p>
+  </div>
+  <div class="head-actions">{% if source.catalog_kind == 'website' %}<a class="button primary" href="/sources/{{ source.id }}/edit">Edit source</a>{% endif %}</div>
+</header>
+
+<section class="metrics metrics-four">
+  {{ metric('Status', source.health.state|replace('_', ' ') if source.health else ('enabled' if source.get('enabled', True) else 'disabled')) }}
+  {{ metric('Last found', source.health.found_count if source.health else 0) }}
+  {{ metric('Last kept', source.health.qualified_count if source.health else 0) }}
+  {{ metric('Events stored', source.events|length, 'latest 50 shown') }}
+</section>
+
+<div class="detail-grid">
+  <section class="panel span-2">
+    <div class="section-head"><div><p class="eyebrow">Operational history</p><h2>Recent source runs</h2></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Run</th><th>State</th><th>Method</th><th>Found</th><th>Kept</th><th>New</th><th>Detail</th></tr></thead>
+      <tbody>{% for row in source.history %}<tr>
+        <td><a class="row-link" href="/runs/{{ row.run_id }}">{{ row.get('seen_date', '') }}</a></td>
+        <td>{{ badge(row.state) }}</td><td>{{ row.method }}<small>{{ row.recipe_version or '' }}</small></td>
+        <td>{{ row.found_count }}</td><td>{{ row.qualified_count }}</td><td>{{ row.new_count }}</td>
+        <td class="wide-cell">{{ row.detail or row.error or '—' }}</td>
+      </tr>{% else %}<tr><td colspan="7"><div class="empty">This source has not run yet.</div></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <aside class="panel fact-panel">
+    <div class="section-head"><div><p class="eyebrow">Catalog</p><h2>Settings</h2></div></div>
+    <dl class="facts">
+      <div><dt>State</dt><dd>{{ 'Enabled' if source.get('enabled', True) else 'Disabled' }}</dd></div>
+      <div><dt>Catalog type</dt><dd>{{ source.catalog_kind|capitalize }}</dd></div>
+      <div><dt>Priority</dt><dd>{{ source.priority }}</dd></div>
+      <div><dt>Profile</dt><dd><code>{{ source.retrieval_profile }}</code></dd></div>
+      <div><dt>Location</dt><dd>{{ source.geo or 'Not set' }}</dd></div>
+      <div><dt>URL</dt><dd>{% if source.url %}<a href="{{ source.url }}" target="_blank" rel="noopener">Open source</a>{% else %}Not set{% endif %}</dd></div>
+      {% if source.get('disabled_reason') %}<div><dt>Disabled because</dt><dd>{{ source.disabled_reason }}</dd></div>{% endif %}
+    </dl>
+  </aside>
+</div>
+
+<section class="panel table-panel">
+  <div class="section-head"><div><p class="eyebrow">Canonical data</p><h2>Events from this source</h2></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Event</th><th>Start</th><th>Place</th><th>Fit</th><th>Status</th></tr></thead>
+    <tbody>{% for event in source.events %}<tr>
+      <td class="wide-cell"><a class="row-link" href="/events/{{ event.id }}">{{ event.title }}</a><small>{{ event.host or 'Host unknown' }}</small></td>
+      <td>{{ event.start[:16]|replace('T', ' ') }}</td><td>{{ event.neighborhood or event.venue or '—' }}</td>
+      <td>{{ badge(event.rank or 'unranked') }}</td><td>{{ badge(event.status) }}</td>
+    </tr>{% else %}<tr><td colspan="5"><div class="empty">No stored events point to this source.</div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

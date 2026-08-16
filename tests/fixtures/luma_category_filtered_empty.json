@@ -1,0 +1,27 @@
+{
+  "entries": [
+    {
+      "api_id": "evt-non-nyc-only",
+      "event": {
+        "api_id": "evt-non-nyc-only",
+        "name": "Newark Gallery Walk",
+        "start_at": "2026-08-16T23:00:00.000Z",
+        "end_at": null,
+        "url": "newark-gallery-walk",
+        "location_type": "offline",
+        "geo_address_info": {
+          "city": "Newark",
+          "region": "New Jersey",
+          "country": "United States",
+          "address": "Newark Gallery",
+          "full_address": "Newark Gallery, Newark, NJ, USA"
+        }
+      },
+      "calendar": {"name": "Regional Art Calendar"},
+      "hosts": [],
+      "ticket_info": {"is_free": true, "is_sold_out": false, "is_near_capacity": false}
+    }
+  ],
+  "has_more": false,
+  "next_cursor": null
+}

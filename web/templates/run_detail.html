@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, metric %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="breadcrumb"><a href="/runs">Runs</a><span>/</span>{{ data.run.id }}</div>
+    <h1>{{ data.run.seen_date }} run</h1>
+    <p class="lede">Started {{ data.run.started_at|replace('T', ' ') }}{% if data.run.finished_at %} and finished {{ data.run.finished_at|replace('T', ' ') }}{% endif %}.</p>
+  </div>
+  <div class="run-state">{{ badge(data.run.state) }}</div>
+</header>
+
+<section class="metrics metrics-seven">
+  {{ metric('Sources', data.totals.sources) }}{{ metric('Checked', data.totals.checked) }}
+  {{ metric('Discoveries', data.totals.discoveries) }}{{ metric('Existing events', data.totals.existing) }}{{ metric('New events', data.totals.new) }}
+  {{ metric('Rejected', data.totals.rejected) }}{{ metric('Source issues', data.totals.issues) }}
+</section>
+
+{% if data.run.error %}<div class="alert error"><strong>Run error</strong>{{ data.run.error }}</div>{% endif %}
+
+<section class="panel table-panel">
+  <div class="section-head"><div><p class="eyebrow">Step by step</p><h2>Source results</h2></div><span class="section-note">Every source in the run manifest</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Source</th><th>State</th><th>Method</th><th>Found</th><th>Parsed</th><th>Kept</th><th>Existing</th><th>New</th><th>Detail and evidence</th></tr></thead>
+    <tbody>{% for source in data.sources %}<tr>
+      <td><a class="row-link" href="/source?source_id={{ source.source_id|urlencode }}">{{ source.source_id }}</a><small>{{ source.started_at[11:19] if source.started_at else '' }}{% if source.finished_at %}–{{ source.finished_at[11:19] }}{% endif %}</small></td>
+      <td>{{ badge(source.state) }}</td><td>{{ source.method }}<small>{{ source.recipe_version or '' }}</small></td>
+      <td>{{ source.found_count }}</td><td>{{ source.parsed_count }}</td><td>{{ source.qualified_count }}</td><td>{{ source.existing_count }}</td><td>{{ source.new_count }}</td>
+      <td class="wide-cell">
+        {{ source.detail or source.error or '—' }}
+        <div class="source-counts">{{ source.rejected_count }} rejected · {{ source.updated_count }} updated · {{ source.unchanged_count }} unchanged · {{ source.duplicate_count }} duplicates{% if source.audit %} · retrieval audit{% endif %}</div>
+        {% if source.rejection_counts %}<div class="source-counts">Rejection reasons: {% for reason, count in source.rejection_counts.items() %}{{ reason }} ({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+        {% if source.artifacts %}<div class="artifact-links">{% for artifact in source.artifacts %}<a href="/artifact?run_id={{ data.run.id|urlencode }}&amp;source_id={{ source.source_id|urlencode }}&amp;index={{ loop.index0 }}" target="_blank">Evidence {{ loop.index }}{% if artifact is mapping and artifact.get('path') %}: {{ artifact.path.split('/')[-1] }}{% endif %}</a>{% endfor %}</div>{% endif %}
+      </td>
+    </tr>{% else %}<tr><td colspan="9"><div class="empty">No source accounting exists for this run.</div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><div><p class="eyebrow">Before and after validation</p><h2>Discoveries</h2></div><span class="section-note">{% if data.totals.staged %}{{ data.totals.staged }} staged · {% endif %}{{ data.totals.new }} new · {{ data.totals.existing }} existing · {{ data.totals.duplicates }} duplicates · {{ data.totals.rejected }} rejected</span></div>
+  <div class="discovery-list">
+  {% for item in data.discoveries %}
+    <details class="discovery">
+      <summary>
+        <span class="discovery-main"><strong>{{ item.display_title }}</strong><small>{{ item.source_id }}{% if item.display_start %} · {{ item.display_start[:16]|replace('T', ' ') }}{% endif %}</small></span>
+        {{ badge(item.outcome) }}
+        {% if item.event_id %}<a class="button tiny" href="/events/{{ item.event_id }}" onclick="event.stopPropagation()">Open event</a>{% endif %}
+      </summary>
+      <div class="discovery-body">
+        {% if item.rejection_reason %}<p class="rejection"><strong>Reason:</strong> {{ item.rejection_reason }}</p>{% endif %}
+        <dl class="facts compact-facts"><div><dt>Discovery ID</dt><dd>{{ item.id }}</dd></div><div><dt>Source key</dt><dd><code>{{ item.source_event_key or '—' }}</code></dd></div></dl>
+        <pre>{{ item.raw|tojson(indent=2) }}</pre>
+      </div>
+    </details>
+  {% else %}<div class="empty">This run did not record any discoveries.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

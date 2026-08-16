@@ -1,0 +1,18 @@
+{
+  "posts": [
+    {
+      "id": "post-outside-window",
+      "content": "Later community plan\nA factual description.",
+      "entity": {
+        "id": "entity-3",
+        "type": "EVENT",
+        "url": null,
+        "startTime": "2026-09-01T22:00:00.000Z",
+        "address": "300 Example Road, Brooklyn, NY"
+      },
+      "links": []
+    }
+  ],
+  "startCursor": "cursor-page-2",
+  "endCursor": null
+}

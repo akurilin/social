@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, fit_filter %}
+{% block content %}
+<header class="page-head">
+  <div><p class="eyebrow">Deduplicated event store</p><h1>Events</h1><p class="lede">Search every unique event, inspect its source history, and change its facts or fit assessment.</p></div>
+  <div class="view-switch" aria-label="Event view">
+    <span class="button primary" aria-current="page">List</span>
+    <a class="button secondary" href="{{ calendar_url }}">Calendar</a>
+  </div>
+</header>
+<form class="filter-bar event-filters" method="get" data-auto-submit>
+  <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ query }}" placeholder="Title, host, venue…" data-submit-on-input></label>
+  <input type="hidden" name="period" value="all">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ direction }}">
+  <label class="filter-checkbox"><input type="checkbox" name="period" value="upcoming" {% if period == 'upcoming' %}checked{% endif %}><span><strong>Today and later</strong><small>Hide older events</small></span></label>
+  {{ fit_filter(rank) }}
+  <label><span>Source</span><select name="source_id"><option value="">Any source</option>{% for value, label in source_options %}<option value="{{ value }}" {% if source_id == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+</form>
+<section class="panel table-panel">
+  <div class="table-summary"><strong>{{ events|length }}</strong> unique events shown{% if period == 'upcoming' %}<span>Past events are hidden</span>{% endif %}{% if events|length == 500 %}<span>Result limit reached. Add a filter to narrow the list.</span>{% endif %}</div>
+  <div class="table-wrap"><table class="events-table">
+    <thead><tr>
+      {% for field, label in [('title','Event'),('start','Start'),('first_seen','First seen'),('last_seen','Last seen'),('place','Place'),('source','Source'),('rank','Fit')] %}
+      <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th>
+      {% endfor %}
+      <th class="event-link-column">Link</th>
+    </tr></thead>
+    <tbody>{% for event in events %}<tr>
+      <td class="wide-cell"><a class="row-link" href="/events/{{ event.id }}"><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</a><small>{{ event.host or 'Host unknown' }}</small></td>
+      <td class="event-date-cell">{{ event.start[:16]|replace('T', ' ') }}</td><td class="event-date-cell">{{ event.first_seen or '—' }}</td><td class="event-date-cell">{{ event.last_seen or '—' }}</td><td>{{ event.neighborhood or event.venue or '—' }}</td>
+      <td><a href="/source?source_id={{ event.source_id|urlencode }}">{{ event.source_id or '—' }}</a></td>
+      <td>{{ badge(event.rank or 'unranked') }}</td>
+      <td class="event-link-cell">{% if event.url %}<a class="event-list-link" href="{{ event.url }}" target="_blank" rel="noopener" aria-label="View original event for {{ event.title }}" title="View original event"><span aria-hidden="true">↗</span></a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="8"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

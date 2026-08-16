@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-head compact">
+  <div>
+    <p class="eyebrow">Editable instructions</p>
+    <h1>{{ title }}</h1>
+    <p class="lede">{{ description }}</p>
+  </div>
+</header>
+<form class="editor-layout" method="post">
+  <section class="panel editor-panel">
+    <div class="editor-toolbar">
+      <span>Markdown</span>
+      <span>{% if setting == 'event_ranking_criteria' %}Used during the next ranking phase. Existing ranks do not change automatically.{% else %}Saved changes take effect on the next run.{% endif %}</span>
+    </div>
+    <label class="sr-only" for="content">{{ title }}</label>
+    <textarea id="content" name="content" class="code-editor" spellcheck="true">{{ content }}</textarea>
+  </section>
+  <aside class="save-rail">
+    <button class="button primary" type="submit">Save changes</button>
+    <a class="button secondary" href="/">Cancel</a>
+    <p>The editor changes the crawler’s main {{ 'local event-ranking file' if setting == 'event_ranking_criteria' else 'skill instructions' }}. Keep headings in place when possible.</p>
+  </aside>
+</form>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-head compact">
+  <div>
+    <p class="eyebrow">Source catalog</p>
+    <h1>{{ title }}</h1>
+    <p class="lede">Set where this source lives and which retrieval recipe it uses.</p>
+  </div>
+</header>
+{% if error %}<div class="alert error" role="alert"><strong>Could not save.</strong> {{ error }}</div>{% endif %}
+<form method="post" class="form-layout">
+  <div class="form-main">
+    <section class="panel form-section">
+      <div class="section-head"><div><p class="eyebrow">Identity</p><h2>Source details</h2></div></div>
+      <div class="field-grid two">
+        <label><span>Name</span><input name="title" value="{{ source.get('title', '') }}" required></label>
+        <label><span>Source ID</span><input name="id" value="{{ source.get('id', '') }}" pattern="[a-z0-9][a-z0-9-]*" required><small>Lowercase letters, numbers, and hyphens.</small></label>
+        <label class="full"><span>URL</span><input type="url" name="url" value="{{ source.get('url', '') }}" placeholder="https://…"></label>
+        <label><span>Location</span><input name="geo" value="{{ source.get('geo', '') }}" placeholder="City, area, or neighborhood"></label>
+        <label><span>Retrieval profile</span><select name="retrieval_profile" required>
+          <option value="">Choose a profile</option>
+          {% for profile in profiles %}<option value="{{ profile }}" {% if source.get('retrieval_profile') == profile %}selected{% endif %}>{{ profile }}</option>{% endfor %}
+        </select></label>
+      </div>
+    </section>
+    <section class="panel form-section">
+      <div class="section-head"><div><p class="eyebrow">Retrieval</p><h2>Priority and parsing</h2></div></div>
+      <div class="field-grid two">
+        <label><span>Priority</span><select name="priority">
+          {% for option in [1, 2, 3] %}<option value="{{ option }}" {% if source.get('priority')|int == option %}selected{% endif %}>{{ option }} — {{ 'highest' if option == 1 else ('normal' if option == 2 else 'low') }}</option>{% endfor %}
+        </select></label>
+        <label class="full"><span>Parsing notes</span><textarea name="parse_hint" rows="6">{{ source.get('parse_hint', '') }}</textarea><small>Tell the crawler where event data is and what can cause a false empty result.</small></label>
+      </div>
+    </section>
+    <details class="panel form-section advanced">
+      <summary>Advanced source fields</summary>
+      <label><span>Extra JSON fields</span><textarea class="code-small" name="extra_json" rows="10" spellcheck="false">{{ source.get('extra_json', '{}') }}</textarea></label>
+      <p class="help">Use this for fields such as <code>auth</code> or <code>watch_for</code>. Main fields above take priority.</p>
+    </details>
+  </div>
+  <aside class="save-rail">
+    <label class="switch-row"><input type="checkbox" name="enabled" {% if source.get('enabled', True) %}checked{% endif %}><span><strong>Enabled</strong><small>Include this source in run plans.</small></span></label>
+    <label><span>Reason when disabled</span><textarea name="disabled_reason" rows="4">{{ source.get('disabled_reason', '') }}</textarea></label>
+    <button class="button primary" type="submit">Save source</button>
+    <a class="button secondary" href="{{ '/source?source_id=' + (original_id|urlencode) if original_id else '/sources' }}">Cancel</a>
+  </aside>
+</form>
+{% endblock %}

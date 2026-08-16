@@ -1,0 +1,17 @@
+{
+  "payload": [
+    {
+      "id": 141759471,
+      "hostId": 49694,
+      "sessionName": "Cancelled Session",
+      "level": "This session is cancelled.",
+      "startsAt": "2026-08-21T14:00:00.000Z",
+      "endsAt": "2026-08-21T15:00:00.000Z",
+      "link": "https://momence.com/s/141759471",
+      "location": "Drawing Room Brooklyn",
+      "freeEvent": true,
+      "isCancelled": true
+    }
+  ],
+  "pagination": {"page": 1, "pageSize": 100, "totalCount": 2}
+}

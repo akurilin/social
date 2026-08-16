@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Catalog and health</p>
+    <h1>Sources</h1>
+    <p class="lede">Manage where the crawler looks. The latest result for each source appears beside its catalog settings.</p>
+    <p class="lede">This list lives on disk in <code>{{ catalog_path }}</code> in the repo.</p>
+  </div>
+</header>
+
+<div class="alert info" role="note">
+  <strong>Adding a new source?</strong> Sources are added through the repo's
+  <code>add-source</code> agent skill, which investigates the site, picks the right
+  retrieval profile, and validates the catalog before saving. Run your coding
+  agent in this repo and ask it to <em>"add a new source"</em> — or explicitly
+  <em>"use the add-source skill"</em>. The agent will walk you through it step by step.
+  Editing an existing source stays on this page.
+</div>
+
+<form class="filter-bar" method="get" data-auto-submit>
+  <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ query }}" placeholder="Name, URL, profile…" data-submit-on-input></label>
+  <label><span>Show</span><select name="state">
+    <option value="all" {% if state == 'all' %}selected{% endif %}>All sources</option>
+    <option value="enabled" {% if state == 'enabled' %}selected{% endif %}>Enabled</option>
+    <option value="disabled" {% if state == 'disabled' %}selected{% endif %}>Disabled</option>
+    <option value="issues" {% if state == 'issues' %}selected{% endif %}>With problems</option>
+  </select></label>
+</form>
+
+<section class="panel table-panel">
+  <div class="table-summary"><strong>{{ sources|length }}</strong> sources shown <span>{{ profiles|length }} retrieval profiles · {{ inbox_count }} inbox sources in this same source catalog</span></div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Source</th><th>Retrieval</th><th>Latest health</th><th>Found</th><th>Last checked</th><th></th></tr></thead>
+    <tbody>
+    {% for source in sources %}
+      <tr class="{% if not source.get('enabled', True) %}is-disabled{% endif %}">
+        <td class="wide-cell">
+          <a class="row-link" href="/source?source_id={{ source.id|urlencode }}">{{ source.title }}</a>
+          <small>{{ source.id }} · {{ source.geo or 'Any location' }}</small>
+        </td>
+        <td><strong>{{ source.retrieval_profile }}</strong><small>Priority {{ source.priority }}</small></td>
+        <td>
+          {% if not source.get('enabled', True) %}{{ badge('disabled') }}
+          {% elif source.health %}{{ badge(source.health.state) }}
+          {% else %}{{ badge('never checked') }}{% endif %}
+        </td>
+        <td>{% if source.health %}{{ source.health.found_count }}<small>{{ source.health.new_count }} new</small>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if source.health %}{{ source.health.seen_date }}{% else %}<span class="muted">Never</span>{% endif %}</td>
+        <td class="actions-cell">{% if source.catalog_kind == 'website' %}<a class="button tiny" href="/sources/{{ source.id }}/edit">Edit</a>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6"><div class="empty">No sources match these filters.</div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

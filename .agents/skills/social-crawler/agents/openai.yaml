@@ -1,0 +1,4 @@
+interface:
+  display_name: "Social Crawler"
+  short_description: "Run full or one-source event crawls"
+  default_prompt: "Use $social-crawler to run a full crawl or test one event source."

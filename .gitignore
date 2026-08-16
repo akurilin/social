@@ -1,0 +1,18 @@
+# Raw scrape output — regenerated every run
+.cache/
+
+# Dynamic operational state — local and machine-written; back it up separately.
+social.db
+social.db-shm
+social.db-wal
+/.fuse_hidden*
+
+# Personal ranking policy. Keep the generic example in Git instead.
+/EVENT_RANKING_CRITERIA.md
+
+# Local source catalog. Keep the default catalog in sources.example.json.
+/sources.json
+
+.DS_Store
+__pycache__/
+*.pyc

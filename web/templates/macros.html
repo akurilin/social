@@ -1,0 +1,21 @@
+{% macro badge(value) -%}
+  <span class="badge badge-{{ (value or 'unknown')|replace('_', '-') }}">{{ (value or 'unknown')|replace('_', ' ') }}</span>
+{%- endmacro %}
+
+{% macro fit_filter(rank) -%}
+  <label><span>Fit</span><select name="rank">
+    <option value="">Any fit</option>
+    <option value="high" {% if rank == 'high' %}selected{% endif %}>High or higher</option>
+    <option value="medium" {% if rank == 'medium' %}selected{% endif %}>Medium or higher</option>
+    <option value="low" {% if rank == 'low' %}selected{% endif %}>Low or higher</option>
+    <option value="unranked" {% if rank == 'unranked' %}selected{% endif %}>Unranked</option>
+  </select></label>
+{%- endmacro %}
+
+{% macro metric(label, value, note='') -%}
+  <div class="metric">
+    <div class="metric-value">{{ value or 0 }}</div>
+    <div class="metric-label">{{ label }}</div>
+    {% if note %}<div class="metric-note">{{ note }}</div>{% endif %}
+  </div>
+{%- endmacro %}

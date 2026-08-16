@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · Social Crawler</title>
+  <meta name="description" content="Control center for the social event crawler">
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=13">
+</head>
+<body{% if wide %} class="wide-page"{% endif %}>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <span class="brand-mark">SC</span>
+        <span><strong>Social Crawler</strong><small>Control center</small></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Overview</a>
+        <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>Runs</a>
+        <a href="/events" {% if request.url.path.startswith('/events') %}aria-current="page"{% endif %}>Events</a>
+        <a href="/calendar" {% if request.url.path == '/calendar' %}aria-current="page"{% endif %}>Calendar</a>
+        <a href="/sources" {% if request.url.path.startswith('/sources') %}aria-current="page"{% endif %}>Sources</a>
+      </nav>
+      <div class="nav-label">Instructions</div>
+      <nav aria-label="Instruction navigation">
+        <a href="/settings/event-ranking-criteria" {% if request.url.path == '/settings/event-ranking-criteria' %}aria-current="page"{% endif %}>Event ranking criteria</a>
+        <a href="/settings/workflow" {% if request.url.path == '/settings/workflow' %}aria-current="page"{% endif %}>Crawler skill</a>
+      </nav>
+      <div class="sidebar-foot">
+        Local control center<br>
+        Data stays on this computer
+      </div>
+    </aside>
+    <main id="main" class="main{% if wide %} main-wide{% endif %}">
+      {% if saved %}
+        <div class="toast" role="status">Changes saved</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', path='/app.js') }}?v=5" defer></script>
+</body>
+</html>
