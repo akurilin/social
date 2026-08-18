@@ -4,10 +4,6 @@ from crawler.adapters.astor_center import (
     ADAPTER_ID as ASTOR_CENTER_ADAPTER_ID,
     AstorCenterAdapter,
 )
-from crawler.adapters.astor_wines import (
-    ADAPTER_ID as ASTOR_WINES_ADAPTER_ID,
-    AstorWinesAdapter,
-)
 from crawler.adapters.anthology import (
     ADAPTER_ID as ANTHOLOGY_ADAPTER_ID,
     AnthologyVeeziAdapter,
@@ -80,7 +76,6 @@ ADAPTERS = {
     ANALOG_FILM_NYC_ADAPTER_ID: AnalogFilmNYCAdapter,
     ANTHOLOGY_ADAPTER_ID: AnthologyVeeziAdapter,
     ASTOR_CENTER_ADAPTER_ID: AstorCenterAdapter,
-    ASTOR_WINES_ADAPTER_ID: AstorWinesAdapter,
     BROOKLYN_MUSEUM_ADAPTER_ID: BrooklynMuseumSearchAdapter,
     CARREAU_CLUB_ADAPTER_ID: CarreauClubFridayMeleeAdapter,
     CASA_ITALIANA_ADAPTER_ID: CasaItalianaAdapter,

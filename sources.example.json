@@ -511,16 +511,6 @@
       "adapter": "astor_center"
     },
     {
-      "id": "astor-wines-tastings",
-      "title": "Astor Wines & Spirits — Free tastings & events",
-      "url": "https://www.astorwines.com/tastingevents.aspx",
-      "priority": 1,
-      "geo": "NoHo (399 Lafayette)",
-      "parse_hint": "Free recurring in-store tastings. Distinct from astor-center paid classes; check both. Primary path: the astor_wines_tastings Python adapter discovers event.aspx detail pages and extracts their visible date, time, availability, and free status. Keep the HTTP calendar profile as the independent audit and fallback path.",
-      "retrieval_profile": "http-calendar-v1",
-      "adapter": "astor_wines_tastings"
-    },
-    {
       "id": "book-events-nyc",
       "title": "Book Events NYC",
       "url": "https://bookevents.nyc/",
