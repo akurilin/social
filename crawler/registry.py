@@ -59,6 +59,10 @@ from crawler.adapters.momence_host import (
     MomenceHostAdapter,
 )
 from crawler.adapters.nitehawk import ADAPTER_ID as NITEHAWK_ADAPTER_ID, NitehawkAdapter
+from crawler.adapters.new_york_social_network import (
+    ADAPTER_ID as NEW_YORK_SOCIAL_NETWORK_ADAPTER_ID,
+    NewYorkSocialNetworkAdapter,
+)
 from crawler.adapters.out_there import ADAPTER_ID, OutThereAdapter
 from crawler.adapters.pioneer_works import (
     ADAPTER_ID as PIONEER_WORKS_ADAPTER_ID,
@@ -88,6 +92,7 @@ ADAPTERS = {
     LUMA_CATEGORY_ADAPTER_ID: LumaCategoryAdapter,
     METROGRAPH_ADAPTER_ID: MetrographSpecialEventsAdapter,
     MOMENCE_HOST_ADAPTER_ID: MomenceHostAdapter,
+    NEW_YORK_SOCIAL_NETWORK_ADAPTER_ID: NewYorkSocialNetworkAdapter,
     NITEHAWK_ADAPTER_ID: NitehawkAdapter,
     PIONEER_WORKS_ADAPTER_ID: PioneerWorksAdapter,
     SECRET_RISO_ADAPTER_ID: SecretRisoCalendarAdapter,

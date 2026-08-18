@@ -200,7 +200,7 @@ class WebControlCenterTests(unittest.TestCase):
             descending.text.index("Zine workshop"),
             descending.text.index("A social dinner"),
         )
-        self.assertIn("First seen", ascending.text)
+        self.assertIn("First added", ascending.text)
         self.assertIn('sort=first_seen&amp;dir=desc', ascending.text)
         self.assertIn('aria-sort="ascending"', ascending.text)
         self.assertIn('aria-sort="descending"', descending.text)

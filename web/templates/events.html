@@ -21,7 +21,7 @@
   <div class="table-summary"><strong>{{ events|length }}</strong> unique events shown{% if period == 'upcoming' %}<span>Past events are hidden</span>{% endif %}{% if events|length == 500 %}<span>Result limit reached. Add a filter to narrow the list.</span>{% endif %}</div>
   <div class="table-wrap"><table class="events-table">
     <thead><tr>
-      {% for field, label in [('title','Event'),('start','Start'),('first_seen','First seen'),('last_seen','Last seen'),('place','Place'),('source','Source'),('rank','Fit')] %}
+      {% for field, label in [('title','Event'),('start','Start'),('first_seen','First added'),('last_seen','Last seen'),('place','Place'),('source','Source'),('rank','Fit')] %}
       <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th>
       {% endfor %}
       <th class="event-link-column">Link</th>

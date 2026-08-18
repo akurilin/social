@@ -18,7 +18,7 @@
 
 <div class="detail-main">
     <section class="panel read-only-section">
-      <div class="section-head"><div><p class="eyebrow">Crawler record</p><h2>Event details</h2></div><span class="section-note">First seen {{ event.first_seen }} · Last seen {{ event.last_seen }}</span></div>
+      <div class="section-head"><div><p class="eyebrow">Crawler record</p><h2>Event details</h2></div><span class="section-note">First added {{ event.first_seen }} · Last seen {{ event.last_seen }}</span></div>
       <dl class="read-only-grid">
         <div><dt>Starts</dt><dd><time datetime="{{ event.start }}">{{ event.start[:16]|replace('T', ' ') }}</time></dd></div>
         {% if event.end %}<div><dt>Ends</dt><dd><time datetime="{{ event.end }}">{{ event.end[:16]|replace('T', ' ') }}</time></dd></div>{% endif %}
