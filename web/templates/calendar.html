@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import badge, fit_filter %}
+{% from "macros.html" import badge, fit_filter, source_filter %}
 {% block content %}
 <header class="calendar-page-head">
   <div class="calendar-heading">
@@ -21,7 +21,7 @@
   <form class="calendar-filters" method="get" data-auto-submit>
     <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
     {{ fit_filter(rank) }}
-    <label class="calendar-source"><span>Source</span><select name="source_id"><option value="">Any source</option>{% for value, label in source_options %}<option value="{{ value }}" {% if source_id == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    {{ source_filter(source_options, selected_source_ids) }}
   </form>
   <div class="calendar-legend" aria-label="Fit colors">
     <span class="legend-high">High</span><span class="legend-medium">Medium</span><span class="legend-low">Low</span><span class="legend-unranked">Unranked</span>

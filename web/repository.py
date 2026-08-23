@@ -43,6 +43,18 @@ def add_minimum_rank_filter(where, params, rank):
         params.extend(accepted_ranks)
 
 
+def add_source_filter(where, params, source_ids):
+    if source_ids is None:
+        return
+    selected = [source_id for source_id in source_ids if source_id]
+    if not selected:
+        where.append("0")
+        return
+    placeholders = ", ".join("?" for _ in selected)
+    where.append("source_id IN ({})".format(placeholders))
+    params.extend(selected)
+
+
 def json_value(value, fallback):
     try:
         return json.loads(value or "")
@@ -333,7 +345,7 @@ class Repository:
             "profiles": sorted(requested_profiles),
         }
 
-    def list_events(self, query="", rank="", period="all", source_id="",
+    def list_events(self, query="", rank="", period="all", source_ids=None,
                     sort="start", direction="desc"):
         where = ["status = 'active'"]
         params = []
@@ -342,9 +354,7 @@ class Repository:
             term = "%{}%".format(query)
             params.extend([term, term, term, term])
         add_minimum_rank_filter(where, params, rank)
-        if source_id:
-            where.append("source_id = ?")
-            params.append(source_id)
+        add_source_filter(where, params, source_ids)
         if period == "upcoming":
             where.append("substr(start, 1, 10) >= date('now', 'localtime')")
         elif period == "past":
@@ -360,15 +370,13 @@ class Repository:
             ).fetchall()
         return [self._event_row(row) for row in rows]
 
-    def calendar_events(self, start_date, end_date, rank="", source_id=""):
+    def calendar_events(self, start_date, end_date, rank="", source_ids=None):
         where = ["substr(start, 1, 10) >= date(?)",
                  "substr(start, 1, 10) <= date(?)",
                  "status = 'active'"]
         params = [start_date, end_date]
         add_minimum_rank_filter(where, params, rank)
-        if source_id:
-            where.append("source_id = ?")
-            params.append(source_id)
+        add_source_filter(where, params, source_ids)
         with self.connect() as con:
             rows = con.execute(
                 "SELECT * FROM events WHERE {} ORDER BY start, title COLLATE NOCASE"

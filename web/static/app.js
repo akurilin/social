@@ -32,6 +32,43 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  document.querySelectorAll("[data-source-filter]").forEach((filter) => {
+    const form = filter.closest("form");
+    const boxes = Array.from(filter.querySelectorAll('input[name="source_id"]'));
+    const marker = filter.querySelector("[data-source-filter-marker]");
+    const summary = filter.querySelector("[data-source-summary]");
+    const syncSummary = () => {
+      const selected = boxes.filter((box) => box.checked).length;
+      if (selected === boxes.length) summary.textContent = "All sources";
+      else if (selected === 0) summary.textContent = "No sources";
+      else summary.textContent = `${selected} of ${boxes.length} sources`;
+    };
+    const setAll = (checked) => {
+      boxes.forEach((box) => { box.checked = checked; });
+      syncSummary();
+      form?.requestSubmit();
+    };
+
+    boxes.forEach((box) => box.addEventListener("change", syncSummary));
+    filter.querySelector("[data-source-select-all]")?.addEventListener(
+      "click", () => setAll(true));
+    filter.querySelector("[data-source-clear-all]")?.addEventListener(
+      "click", () => setAll(false));
+    form?.addEventListener("submit", () => {
+      if (boxes.length && boxes.every((box) => box.checked)) {
+        if (marker) marker.disabled = true;
+        boxes.forEach((box) => { box.disabled = true; });
+      }
+    });
+    syncSummary();
+  });
+
+  document.addEventListener("click", (event) => {
+    document.querySelectorAll("[data-source-filter][open]").forEach((filter) => {
+      if (!filter.contains(event.target)) filter.removeAttribute("open");
+    });
+  });
+
   document.querySelectorAll("[data-day-dialog]").forEach((button) => {
     button.addEventListener("click", () => {
       const dialog = document.getElementById(button.dataset.dayDialog);

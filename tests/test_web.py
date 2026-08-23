@@ -186,6 +186,13 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertIn('aria-sort="ascending"', ascending.text)
         self.assertIn('aria-sort="descending"', descending.text)
 
+    def test_event_list_marks_day_boundaries_when_sorted_by_start(self):
+        chronological = self.client.get("/events?period=all&sort=start&dir=asc")
+        alphabetical = self.client.get("/events?period=all&sort=title&dir=asc")
+
+        self.assertEqual(2, chronological.text.count('class="day-start"'))
+        self.assertNotIn('class="day-start"', alphabetical.text)
+
     def test_event_list_sorts_by_first_seen_in_both_directions(self):
         ascending = self.client.get("/events?sort=first_seen&dir=asc")
         descending = self.client.get("/events?sort=first_seen&dir=desc")
@@ -319,6 +326,10 @@ class WebControlCenterTests(unittest.TestCase):
             'aria-label="View original event for A social dinner"',
             response.text,
         )
+        self.assertLess(
+            response.text.index('class="event-link-column">Link</th>'),
+            response.text.index('sort=start'),
+        )
 
     def test_result_filters_submit_without_apply_buttons(self):
         pages = {
@@ -392,6 +403,78 @@ class WebControlCenterTests(unittest.TestCase):
         )
         self.assertNotIn('href="/events/{}"'.format(self.event_id), high_fit_calendar.text)
 
+    def test_event_views_share_a_multi_source_filter(self):
+        catalog_path = self.root / "sources.json"
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        catalog["sources"].append({
+            "id": "source-two", "title": "Source Two",
+            "url": "https://example.com/source-two", "priority": 2,
+            "geo": "NYC", "parse_hint": "Test two",
+            "retrieval_profile": "test-v1",
+        })
+        catalog_path.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+        second_event = events_store.normalise_incoming({
+            "source_id": "source-two", "title": "Second source gathering",
+            "start": self.month + "-10T19:00:00-04:00",
+            "url": "https://example.com/source-two/gathering",
+        }, dt.date.today().isoformat())
+        con = events_store.connect(str(self.database))
+        with con:
+            events_store.upsert_event(con, second_event)
+        con.close()
+
+        params = [
+            ("period", "all"), ("sources_filtered", "1"),
+            ("source_id", "source-two"),
+        ]
+        event_list = self.client.get("/events", params=params)
+        calendar = self.client.get("/calendar", params=[
+            ("month", self.month), ("sources_filtered", "1"),
+            ("source_id", "source-two"),
+        ])
+        no_sources = self.client.get("/events", params={
+            "period": "all", "sources_filtered": "1",
+        })
+
+        self.assertIn("Second source gathering", event_list.text)
+        self.assertNotIn("A social dinner", event_list.text)
+        self.assertIn("Second source gathering", calendar.text)
+        self.assertNotIn("A social dinner", calendar.text)
+        self.assertNotIn("A social dinner", no_sources.text)
+        self.assertNotIn("Second source gathering", no_sources.text)
+        self.assertIn("1 of 2 sources", event_list.text)
+        self.assertIn('data-source-filter', event_list.text)
+        self.assertIn('data-source-select-all', event_list.text)
+        self.assertIn('data-source-clear-all', event_list.text)
+        self.assertIn(
+            '/calendar?sources_filtered=1&amp;source_id=source-two',
+            event_list.text,
+        )
+        self.assertEqual(
+            2,
+            event_list.text.count(
+                '/calendar?sources_filtered=1&amp;source_id=source-two'),
+        )
+        self.assertIn(
+            '/events?sources_filtered=1&amp;source_id=source-two&amp;period=all',
+            calendar.text,
+        )
+        self.assertEqual(
+            2,
+            calendar.text.count(
+                '/events?sources_filtered=1&amp;source_id=source-two&amp;period=all'),
+        )
+
+    def test_repository_filters_events_by_multiple_sources(self):
+        both = app.state.repo.list_events(source_ids=["source-one", "missing"])
+        none = app.state.repo.list_events(source_ids=[])
+
+        self.assertEqual(
+            {"A social dinner", "Zine workshop"},
+            {event["title"] for event in both},
+        )
+        self.assertEqual([], none)
+
     def test_fit_filter_uses_selected_rank_as_minimum(self):
         low_event = events_store.normalise_incoming({
             "source_id": "source-one", "title": "Low fit gathering",
@@ -449,6 +532,8 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertIn('form[data-auto-submit]', response.text)
         self.assertIn('input[type=\'checkbox\']', response.text)
         self.assertIn('window.setTimeout(submit, 350)', response.text)
+        self.assertIn('[data-source-filter]', response.text)
+        self.assertIn('data-source-select-all', response.text)
 
     def test_calendar_grid_groups_events_by_day(self):
         response = self.client.get("/calendar?month=" + self.month)

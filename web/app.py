@@ -90,8 +90,29 @@ def source_options(request):
 
 
 def query_url(path, values):
-    clean = {key: value for key, value in values.items() if value not in (None, "")}
-    return path + ("?" + urlencode(clean) if clean else "")
+    clean = {
+        key: value for key, value in values.items()
+        if value not in (None, "", [])
+    }
+    return path + ("?" + urlencode(clean, doseq=True) if clean else "")
+
+
+def source_filter(request):
+    options = source_options(request)
+    requested = request.query_params.getlist("source_id")
+    active = "sources_filtered" in request.query_params or bool(requested)
+    selected = requested if active else [value for value, _ in options]
+    return {
+        "source_options": options,
+        "selected_source_ids": selected,
+        "source_filter_active": active,
+    }
+
+
+def source_filter_query(selected, active):
+    if not active:
+        return {}
+    return {"sources_filtered": "1", "source_id": selected}
 
 
 def month_value(raw):
@@ -274,7 +295,9 @@ def events(request: Request):
     query = request.query_params.get("q", "").strip()
     rank = request.query_params.get("rank", "")
     period = request.query_params.get("period", "upcoming")
-    source_id = request.query_params.get("source_id", "")
+    sources = source_filter(request)
+    selected_source_ids = sources["selected_source_ids"]
+    source_filter_active = sources["source_filter_active"]
     sort = request.query_params.get("sort", "start")
     default_direction = "asc" if period == "upcoming" else "desc"
     direction = request.query_params.get("dir", default_direction)
@@ -284,23 +307,30 @@ def events(request: Request):
             "title", "start", "first_seen", "last_seen", "place", "source", "rank"}:
         sort = "start"
     items = repo(request).list_events(
-        query, rank, period, source_id, sort, direction)
+        query, rank, period,
+        selected_source_ids if source_filter_active else None,
+        sort, direction)
     filters = {
-        "q": query, "rank": rank, "period": period, "source_id": source_id,
+        "q": query, "rank": rank, "period": period,
     }
+    filters.update(source_filter_query(
+        selected_source_ids, source_filter_active))
     sort_links = {}
     for field in (
             "title", "start", "first_seen", "last_seen", "place", "source", "rank"):
         next_direction = "desc" if sort == field and direction == "asc" else "asc"
         sort_links[field] = query_url(
             "/events", dict(filters, sort=field, dir=next_direction))
-    calendar_url = query_url(
-        "/calendar", {"rank": rank, "source_id": source_id})
+    calendar_filters = {"rank": rank}
+    calendar_filters.update(source_filter_query(
+        selected_source_ids, source_filter_active))
+    calendar_url = query_url("/calendar", calendar_filters)
     return page(
         request, "events.html", title="Events", events=items, query=query,
-        rank=rank, period=period, source_id=source_id,
-        source_options=source_options(request), sort=sort, direction=direction,
+        rank=rank, period=period, sort=sort, direction=direction,
+        **sources,
         sort_links=sort_links, calendar_url=calendar_url,
+        calendar_nav_url=calendar_url,
     )
 
 
@@ -308,13 +338,16 @@ def events(request: Request):
 def event_calendar(request: Request):
     month = month_value(request.query_params.get("month"))
     rank = request.query_params.get("rank", "")
-    source_id = request.query_params.get("source_id", "")
+    sources = source_filter(request)
+    selected_source_ids = sources["selected_source_ids"]
+    source_filter_active = sources["source_filter_active"]
     weeks = calendar_lib.Calendar(firstweekday=0).monthdatescalendar(
         month.year, month.month)
     grid_start = weeks[0][0]
     grid_end = weeks[-1][-1]
     items = repo(request).calendar_events(
-        grid_start.isoformat(), grid_end.isoformat(), rank, source_id)
+        grid_start.isoformat(), grid_end.isoformat(), rank,
+        selected_source_ids if source_filter_active else None)
     by_date = {}
     for event in items:
         by_date.setdefault((event.get("start") or "")[:10], []).append(event)
@@ -330,22 +363,26 @@ def event_calendar(request: Request):
     } for day in week] for week in weeks]
     previous_month = (month - dt.timedelta(days=1)).replace(day=1)
     next_month = (month + dt.timedelta(days=32)).replace(day=1)
-    filters = {"rank": rank, "source_id": source_id}
+    filters = {"rank": rank}
+    filters.update(source_filter_query(
+        selected_source_ids, source_filter_active))
+    list_url = query_url("/events", dict(filters, period="all"))
+    calendar_nav_url = query_url(
+        "/calendar", dict(filters, month=month.strftime("%Y-%m")))
     return page(
         request, "calendar.html", title="Event calendar", wide=True,
         month=month, month_label=month.strftime("%B %Y"), weeks=cells,
         event_count=sum(len(day["events"]) for week in cells for day in week
                         if day["in_month"]),
-        rank=rank, source_id=source_id,
-        source_options=source_options(request),
+        rank=rank, **sources,
         previous_url=query_url(
             "/calendar", dict(filters, month=previous_month.strftime("%Y-%m"))),
         next_url=query_url(
             "/calendar", dict(filters, month=next_month.strftime("%Y-%m"))),
         today_url=query_url(
             "/calendar", dict(filters, month=today.strftime("%Y-%m"))),
-        list_url=query_url(
-            "/events", {"rank": rank, "source_id": source_id, "period": "all"}),
+        list_url=list_url, events_nav_url=list_url,
+        calendar_nav_url=calendar_nav_url,
     )
 
 

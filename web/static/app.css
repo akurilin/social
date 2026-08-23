@@ -122,6 +122,32 @@ textarea { padding: 10px 11px; line-height: 1.5; resize: vertical; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(36, 106, 80, .12); }
 label small, .help { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
+.source-filter { position: relative; flex: 0 1 390px; min-width: 260px; }
+.source-filter > summary { display: flex; height: 40px; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 11px; border: 1px solid var(--line-strong); border-radius: 7px; background: white; cursor: pointer; list-style: none; }
+.source-filter > summary::-webkit-details-marker { display: none; }
+.source-filter > summary:hover { border-color: #8e958e; }
+.source-filter[open] > summary { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(36, 106, 80, .12); }
+.source-filter > summary > span:first-child { min-width: 0; }
+.source-filter-label, .source-filter > summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-filter-label { margin-bottom: 2px; color: var(--muted); font: 700 8px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.source-filter > summary strong { font-size: 11px; line-height: 1.15; }
+.source-filter-chevron { flex: 0 0 auto; color: var(--muted); font-size: 16px; line-height: 1; transition: transform .15s ease; }
+.source-filter[open] .source-filter-chevron { transform: rotate(180deg); }
+.source-filter-panel { position: absolute; top: calc(100% + 7px); right: 0; z-index: 12; width: min(720px, calc(100vw - 54px)); padding: 13px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); box-shadow: 0 18px 50px rgba(23, 31, 26, .18); }
+.source-filter-panel > input[type="hidden"] { display: none; }
+.source-filter-actions { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.source-filter-actions > span { margin-right: auto; color: var(--muted); font: 700 9px/1.2 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.source-filter-actions button { padding: 4px 7px; border: 0; background: transparent; color: var(--accent-dark); cursor: pointer; font-size: 10px; font-weight: 700; }
+.source-filter-actions button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.source-filter-options { display: grid; max-height: 340px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; overflow-y: auto; }
+.filter-bar .source-filter-options label, .calendar-filters .source-filter-options label { display: flex; min-width: 0; align-items: flex-start; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.source-filter-options label:hover { background: var(--surface-2); }
+.source-filter-options input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--accent); }
+.source-filter-options label > span { min-width: 0; margin: 0; color: inherit; font: inherit; letter-spacing: normal; text-transform: none; }
+.source-filter-options strong, .source-filter-options small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-filter-options strong { font-size: 11px; line-height: 1.25; }
+.source-filter-options small { margin-top: 2px; color: var(--muted); font: 9px/1.2 var(--mono); }
+
 .table-panel { overflow: hidden; }
 .table-summary { padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .table-summary strong { color: var(--ink); font-size: 16px; }
@@ -138,6 +164,7 @@ tbody tr:first-child td { border-top: 0; }
 tbody tr:hover td { background: #faf9f4; }
 .events-table tbody tr:nth-child(even) td { background: #f6f5ef; }
 .events-table tbody tr:hover td { background: #ecebe4; }
+.events-table tbody tr.day-start td { border-top: 3px solid var(--line-strong); }
 .events-table .event-date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
 td small { display: block; max-width: 240px; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .wide-cell { min-width: 210px; max-width: 420px; }
@@ -245,7 +272,7 @@ code { font-size: .92em; }
 .calendar-filter-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 11px; }
 .calendar-filters { display: flex; align-items: flex-end; gap: 9px; }
 .calendar-filters label { min-width: 120px; }
-.calendar-filters .calendar-source { min-width: 220px; }
+.calendar-filters .source-filter { min-width: 280px; }
 .calendar-filters label > span { display: block; margin-bottom: 6px; color: var(--muted); font: 700 9px/1.2 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
 .calendar-legend { display: flex; align-items: center; gap: 11px; padding-bottom: 9px; color: var(--muted); font: 9px/1 var(--mono); text-transform: uppercase; }
 .calendar-legend span::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 2px; vertical-align: 0; }
@@ -335,6 +362,9 @@ code { font-size: .92em; }
   .span-2 { grid-column: span 1; }
   .filter-bar { align-items: stretch; flex-direction: column; }
   .filter-bar label, .filter-bar .search-field { min-width: 0; }
+  .source-filter { width: 100%; min-width: 0; }
+  .source-filter-panel { right: 0; width: min(720px, calc(100vw - 30px)); }
+  .source-filter-options { grid-template-columns: minmax(0, 1fr); }
   .field-grid.two { grid-template-columns: minmax(0, 1fr); }
   .field-grid .full { grid-column: 1; }
   .read-only-grid { grid-template-columns: minmax(0, 1fr); }
@@ -349,6 +379,6 @@ code { font-size: .92em; }
   .calendar-heading h1 { font-size: 28px; }
   .calendar-page-head .view-switch { margin-left: auto; }
   .calendar-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .calendar-filters label, .calendar-filters .calendar-source { min-width: 0; }
-  .calendar-filters .calendar-source { grid-column: 1 / -1; }
+  .calendar-filters label, .calendar-filters .source-filter { min-width: 0; }
+  .calendar-filters .source-filter { grid-column: 1 / -1; }
 }
