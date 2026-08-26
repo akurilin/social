@@ -28,6 +28,10 @@ from crawler.adapters.endorphins import (
     ADAPTER_ID as ENDORPHINS_ADAPTER_ID,
     EndorphinsAdapter,
 )
+from crawler.adapters.fabrik import (
+    ADAPTER_ID as FABRIK_ADAPTER_ID,
+    FabrikGatheringsAdapter,
+)
 from crawler.adapters.gather_community import (
     ADAPTER_ID as GATHER_COMMUNITY_ADAPTER_ID,
     GatherCommunityCalendarAdapter,
@@ -80,6 +84,7 @@ ADAPTERS = {
     CARREAU_CLUB_ADAPTER_ID: CarreauClubFridayMeleeAdapter,
     CASA_ITALIANA_ADAPTER_ID: CasaItalianaAdapter,
     ENDORPHINS_ADAPTER_ID: EndorphinsAdapter,
+    FABRIK_ADAPTER_ID: FabrikGatheringsAdapter,
     GATHER_COMMUNITY_ADAPTER_ID: GatherCommunityCalendarAdapter,
     IIC_NEW_YORK_ADAPTER_ID: IICNewYorkEventsAdapter,
     LALLIANCE_ADAPTER_ID: LAllianceEventsAdapter,

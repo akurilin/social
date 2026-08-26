@@ -1,0 +1,60 @@
+{
+  "total_count": 4,
+  "total_pages": 2,
+  "current_page": 2,
+  "items": [
+    {
+      "id": "event-end",
+      "title": "Late Design Salon",
+      "description": "A design discussion that ends after midnight.",
+      "date": "2026-08-28",
+      "start_time": "11:00 PM",
+      "end_time": "1:00 AM",
+      "event_size": 40,
+      "is_members_only": true,
+      "community": "Design Circle",
+      "luma_link": "https://app.joinfabrik.com/design1",
+      "status": "Published",
+      "space": {
+        "name": "River North",
+        "timezone_details": {"iana_name": "America/Chicago"},
+        "address": {
+          "address1": "440 N Wells St",
+          "city": "Chicago",
+          "state": "IL",
+          "zip_code": "60654",
+          "country": "United States"
+        }
+      },
+      "is_ticketed": true,
+      "ticketing_details": "$35 member / $50 public"
+    },
+    {
+      "id": "event-outside",
+      "title": "Next Week Workshop",
+      "description": "A later workshop.",
+      "date": "2026-08-29",
+      "start_time": "18:00",
+      "duration": 90,
+      "event_size": 25,
+      "is_members_only": false,
+      "community": "Workshop Host",
+      "luma_link": "https://luma.com/next-week-workshop",
+      "status": "Published",
+      "space": {
+        "name": "Dumbo",
+        "timezone_details": {"iana_name": "America/New_York"},
+        "address": {
+          "address1": "20 Jay St",
+          "address2": "Suite 218",
+          "city": "Brooklyn",
+          "state": "NY",
+          "zip_code": "11201",
+          "country": "United States"
+        }
+      },
+      "is_ticketed": true,
+      "ticketing_details": null
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "total_count": 4,
+  "total_pages": 2,
+  "current_page": 1,
+  "items": [
+    {
+      "id": "event-start",
+      "title": "Open Studio Breakfast",
+      "description": "Meet local artists over breakfast.",
+      "date": "2026-08-26",
+      "start_time": "10:00 AM",
+      "end_time": "12:00 PM",
+      "duration": 120,
+      "event_size": 30,
+      "is_public": true,
+      "is_members_only": false,
+      "is_fabrik_hosted": false,
+      "community": "Studio Table",
+      "luma_link": "https://luma.com/open-studio-breakfast",
+      "short_code": "breakfast1",
+      "status": "Published",
+      "owner": {"display_name": "A. Host"},
+      "space": {
+        "name": "Tribeca",
+        "timezone_details": {"iana_name": "America/New_York"},
+        "address": {
+          "address1": "12 Vestry St",
+          "city": "New York",
+          "state": "NY",
+          "zip_code": "10013",
+          "country": "United States"
+        }
+      },
+      "is_ticketed": true,
+      "ticketing_details": "Free"
+    },
+    {
+      "id": "event-cancelled",
+      "title": "Cancelled Supper",
+      "description": "This event will not occur.",
+      "date": "2026-08-27",
+      "start_time": "7:00 PM",
+      "end_time": "9:00 PM",
+      "event_size": 20,
+      "is_members_only": true,
+      "community": "Fabrik",
+      "luma_link": "https://app.joinfabrik.com/cancelled1",
+      "status": "Cancelled",
+      "space": {
+        "name": "River North",
+        "timezone_details": {"iana_name": "America/Chicago"},
+        "address": {
+          "address1": "440 N Wells St",
+          "city": "Chicago",
+          "state": "IL",
+          "zip_code": "60654",
+          "country": "United States"
+        }
+      },
+      "is_ticketed": true,
+      "ticketing_details": "$20"
+    }
+  ]
+}
