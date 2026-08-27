@@ -16,10 +16,14 @@ from .repository import PROBLEM_STATES, ROOT, Repository
 
 
 WEB_ROOT = Path(__file__).resolve().parent
+DEFAULT_EVENT_SORT = "start"
+DEFAULT_EVENT_SORT_DIRECTION = "asc"
+SORT_DIRECTIONS = {"asc", "desc"}
+SOURCE_SORTS = {"added_on"}
 CORE_SOURCE_FIELDS = {
     "id", "title", "url", "priority", "geo", "parse_hint",
     "retrieval_profile", "enabled", "disabled_reason", "health", "history",
-    "events", "catalog_kind",
+    "events", "catalog_kind", "added_on",
 }
 
 
@@ -170,8 +174,14 @@ def sources(request: Request):
     query = request.query_params.get("q", "").strip()
     normalized_query = query.lower()
     state = request.query_params.get("state", "enabled") or "enabled"
+    sort = request.query_params.get("sort", "")
+    direction = request.query_params.get("dir", "asc")
     if state not in {"all", "enabled", "disabled", "issues"}:
         state = "enabled"
+    if sort not in SOURCE_SORTS:
+        sort = ""
+    if direction not in SORT_DIRECTIONS:
+        direction = "asc"
     if normalized_query:
         items = [item for item in items if normalized_query in " ".join((
             item.get("id", ""), item.get("title", ""), item.get("url", ""),
@@ -184,10 +194,25 @@ def sources(request: Request):
     elif state == "issues":
         items = [item for item in items if item.get("health")
                  and item["health"].get("state") in PROBLEM_STATES]
+    if sort == "added_on":
+        # Keep undated legacy rows after rows with known dates.
+        dated = [item for item in items if item.get("added_on")]
+        undated = [item for item in items if not item.get("added_on")]
+        items = sorted(
+            dated, key=lambda item: item["added_on"],
+            reverse=direction == "desc",
+        ) + undated
+    filters = {"q": query, "state": state}
+    next_added_direction = (
+        "desc" if sort == "added_on" and direction == "asc" else "asc"
+    )
     catalog = repo(request).load_catalog()
     return page(
         request, "sources.html", title="Sources", sources=items, query=query,
-        state=state, profiles=catalog.get("retrieval_profiles") or {},
+        state=state, sort=sort, direction=direction,
+        sort_links={"added_on": query_url(
+            "/sources", dict(filters, sort="added_on", dir=next_added_direction))},
+        profiles=catalog.get("retrieval_profiles") or {},
         inbox_count=len((catalog.get("inbox_sources") or {}).get("items") or []),
         catalog_path=repo(request).catalog_path.name,
     )
@@ -298,14 +323,14 @@ def events(request: Request):
     sources = source_filter(request)
     selected_source_ids = sources["selected_source_ids"]
     source_filter_active = sources["source_filter_active"]
-    sort = request.query_params.get("sort", "start")
-    default_direction = "asc" if period == "upcoming" else "desc"
-    direction = request.query_params.get("dir", default_direction)
-    if direction not in {"asc", "desc"}:
-        direction = default_direction
+    # Keep the next event first unless the user selects another order.
+    sort = request.query_params.get("sort", DEFAULT_EVENT_SORT)
+    direction = request.query_params.get("dir", DEFAULT_EVENT_SORT_DIRECTION)
+    if direction not in SORT_DIRECTIONS:
+        direction = DEFAULT_EVENT_SORT_DIRECTION
     if sort not in {
             "title", "start", "first_seen", "last_seen", "place", "source", "rank"}:
-        sort = "start"
+        sort = DEFAULT_EVENT_SORT
     items = repo(request).list_events(
         query, rank, period,
         selected_source_ids if source_filter_active else None,

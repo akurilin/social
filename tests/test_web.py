@@ -186,6 +186,15 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertIn('aria-sort="ascending"', ascending.text)
         self.assertIn('aria-sort="descending"', descending.text)
 
+    def test_event_list_defaults_to_start_ascending(self):
+        response = self.client.get("/events?period=all")
+
+        self.assertLess(
+            response.text.index("A social dinner"),
+            response.text.index("Zine workshop"),
+        )
+        self.assertIn('aria-sort="ascending"', response.text)
+
     def test_event_list_marks_day_boundaries_when_sorted_by_start(self):
         chronological = self.client.get("/events?period=all&sort=start&dir=asc")
         alphabetical = self.client.get("/events?period=all&sort=title&dir=asc")
@@ -355,6 +364,33 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('name="q" value="Source ONE"', response.text)
         self.assertIn("Source One", response.text)
+
+    def test_source_list_shows_and_sorts_date_added(self):
+        catalog = app.state.repo.load_catalog()
+        catalog["sources"][0]["added_on"] = "2026-08-01"
+        catalog["sources"].append({
+            "id": "source-two", "title": "Source Two",
+            "url": "https://example.com/two", "priority": 2,
+            "geo": "NYC", "parse_hint": "Test",
+            "retrieval_profile": "test-v1", "added_on": "2026-08-10",
+        })
+        app.state.repo.save_catalog(catalog)
+
+        ascending = self.client.get("/sources?sort=added_on&dir=asc")
+        descending = self.client.get("/sources?sort=added_on&dir=desc")
+
+        self.assertLess(
+            ascending.text.index("Source One"),
+            ascending.text.index("Source Two"),
+        )
+        self.assertLess(
+            descending.text.index("Source Two"),
+            descending.text.index("Source One"),
+        )
+        self.assertIn("2026-08-01", ascending.text)
+        self.assertIn("2026-08-10", ascending.text)
+        self.assertIn('aria-sort="ascending"', ascending.text)
+        self.assertIn('aria-sort="descending"', descending.text)
 
     def test_source_pages_do_not_show_or_edit_a_schedule(self):
         source_list = self.client.get("/sources")
@@ -697,6 +733,24 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertNotIn("mail-v1", updated["retrieval_profiles"])
         self.assertEqual(removed["sources"], ["mailing-list"])
         self.assertEqual(removed["inbox_sources"], ["inbox-one"])
+
+    def test_repository_dates_new_sources_and_keeps_date_on_edit(self):
+        repository = Repository(self.root, self.database)
+        source = {
+            "id": "source-two", "title": "Source Two",
+            "url": "https://example.com/two", "priority": 2,
+            "geo": "NYC", "parse_hint": "Test",
+            "retrieval_profile": "test-v1",
+        }
+
+        repository.upsert_source(source)
+        created = repository.get_source("source-two")
+        source["title"] = "Renamed Source"
+        repository.upsert_source(source, original_id="source-two")
+        updated = repository.get_source("source-two")
+
+        self.assertEqual(created["added_on"], dt.date.today().isoformat())
+        self.assertEqual(updated["added_on"], created["added_on"])
 
     def test_source_list_excludes_sources_that_exist_only_in_history(self):
         repository = Repository(self.root, self.database)

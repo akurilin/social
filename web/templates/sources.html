@@ -20,6 +20,7 @@
 </div>
 
 <form class="filter-bar" method="get" data-auto-submit>
+  {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ direction }}">{% endif %}
   <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ query }}" placeholder="Name, URL, profile…" data-submit-on-input></label>
   <label><span>Show</span><select name="state">
     <option value="all" {% if state == 'all' %}selected{% endif %}>All sources</option>
@@ -33,7 +34,7 @@
   <div class="table-summary"><strong>{{ sources|length }}</strong> sources shown <span>{{ profiles|length }} retrieval profiles · {{ inbox_count }} inbox sources in this same source catalog</span></div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Source</th><th>Retrieval</th><th>Latest health</th><th>Found</th><th>Last checked</th><th></th></tr></thead>
+    <thead><tr><th>Source</th><th>Retrieval</th><th>Latest health</th><th>Found</th><th{% if sort == 'added_on' %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links.added_on }}">Added{% if sort == 'added_on' %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th><th>Last checked</th><th></th></tr></thead>
     <tbody>
     {% for source in sources %}
       <tr class="{% if not source.get('enabled', True) %}is-disabled{% endif %}">
@@ -48,11 +49,12 @@
           {% else %}{{ badge('never checked') }}{% endif %}
         </td>
         <td>{% if source.health %}{{ source.health.found_count }}<small>{{ source.health.new_count }} new</small>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="event-date-cell">{{ source.added_on or '—' }}</td>
         <td>{% if source.health %}{{ source.health.seen_date }}{% else %}<span class="muted">Never</span>{% endif %}</td>
         <td class="actions-cell">{% if source.catalog_kind == 'website' %}<a class="button tiny" href="/sources/{{ source.id }}/edit">Edit</a>{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="6"><div class="empty">No sources match these filters.</div></td></tr>
+      <tr><td colspan="7"><div class="empty">No sources match these filters.</div></td></tr>
     {% endfor %}
     </tbody>
   </table>

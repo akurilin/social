@@ -207,6 +207,7 @@ class Repository:
 
     def list_sources(self):
         catalog = self.load_catalog()
+        catalog_created_on = catalog.get("generated", "")
         health = {}
         with self.connect() as con:
             for row in con.execute("SELECT * FROM latest_source_health").fetchall():
@@ -214,12 +215,14 @@ class Repository:
         out = []
         for source in catalog.get("sources") or []:
             item = dict(source)
+            item.setdefault("added_on", catalog_created_on)
             item["catalog_kind"] = "website"
             item["health"] = health.get(source.get("id"))
             out.append(item)
         inbox = catalog.get("inbox_sources") or {}
         for source in inbox.get("items") or []:
             item = dict(source)
+            item.setdefault("added_on", catalog_created_on)
             item.setdefault("url", item.get("signup_url", ""))
             item.setdefault("priority", inbox.get("priority", 3))
             item.setdefault("geo", "Inbox")
@@ -279,6 +282,7 @@ class Repository:
     def upsert_source(self, values, original_id=None):
         catalog = self.load_catalog()
         sources = catalog.setdefault("sources", [])
+        values = dict(values)
         if original_id:
             index = next((i for i, item in enumerate(sources)
                           if item.get("id") == original_id), None)
@@ -287,10 +291,17 @@ class Repository:
             if values["id"] != original_id and any(
                     item.get("id") == values["id"] for item in sources):
                 raise ValueError("A source with this ID already exists.")
+            # Keep the original date when an edit omits catalog metadata.
+            values.setdefault(
+                "added_on",
+                sources[index].get("added_on") or catalog.get("generated")
+                or dt.date.today().isoformat(),
+            )
             sources[index] = values
         else:
             if any(item.get("id") == values["id"] for item in sources):
                 raise ValueError("A source with this ID already exists.")
+            values.setdefault("added_on", dt.date.today().isoformat())
             sources.append(values)
         self.save_catalog(catalog)
 
