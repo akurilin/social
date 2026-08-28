@@ -694,6 +694,7 @@ class PipelineIntegrationTests(unittest.TestCase):
             """)
             con.close()
 
+            before = events_store.database_schema_status(database)
             migrated = events_store.connect(database)
             event_columns = {row[1] for row in migrated.execute("PRAGMA table_info(events)")}
             source_run_columns = {
@@ -706,15 +707,46 @@ class PipelineIntegrationTests(unittest.TestCase):
                 "SELECT url FROM event_urls WHERE event_id='event-one'"
             ).fetchone()[0]
             schema_version = migrated.execute("PRAGMA user_version").fetchone()[0]
+            with migrated:
+                migrated.execute(
+                    "UPDATE events SET rank=? WHERE id='event-one'",
+                    (events_store.INELIGIBLE_RANK,),
+                )
+            rank = migrated.execute(
+                "SELECT rank FROM events WHERE id='event-one'"
+            ).fetchone()[0]
+            with self.assertRaises(sqlite3.IntegrityError):
+                with migrated:
+                    migrated.execute(
+                        "UPDATE events SET rank='invalid' WHERE id='event-one'"
+                    )
             migrated.close()
 
             self.assertEqual(title, "Kept event")
             self.assertEqual(alias, "https://example.com/events/kept-event")
+            self.assertEqual(before["state"], "behind")
+            self.assertEqual(before["current_version"], 0)
             self.assertEqual(schema_version, events_store.SCHEMA_VERSION)
+            self.assertEqual(rank, events_store.INELIGIBLE_RANK)
             self.assertIn("work_json", source_run_columns)
             self.assertIn("signup_url", event_columns)
             self.assertIn("explicit_age_min", event_columns)
             self.assertIn("explicit_age_max", event_columns)
+
+    def test_database_status_rejects_a_newer_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            database = os.path.join(tmp, "social.db")
+            con = events_store.connect(database)
+            newer_version = events_store.SCHEMA_VERSION + 1
+            con.execute("PRAGMA user_version = {}".format(newer_version))
+            con.close()
+
+            status = events_store.database_schema_status(database)
+
+            self.assertEqual(status["state"], "ahead")
+            self.assertEqual(status["current_version"], newer_version)
+            with self.assertRaises(RuntimeError):
+                events_store.connect(database)
 
 
 if __name__ == "__main__":

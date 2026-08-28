@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-head compact">
+  <div>
+    <p class="eyebrow">Action required</p>
+    <h1>{% if schema.state == 'ahead' %}Application update required{% elif schema.state == 'error' %}Database check failed{% else %}Database update required{% endif %}</h1>
+    <p class="lede">The control center stopped before it read event data.</p>
+  </div>
+</header>
+
+<section class="panel migration-panel">
+{% if schema.state == 'behind' %}
+  <h2>Update the database schema</h2>
+  <p>This database uses schema {{ schema.current_version }}. This application needs schema {{ schema.latest_version }}.</p>
+  <p>From the project folder, run:</p>
+  <pre><code>{{ migration_command }}</code></pre>
+  <p>Then refresh this page.</p>
+{% elif schema.state == 'ahead' %}
+  <h2>Update the application</h2>
+  <p>This database uses schema {{ schema.current_version }}. This application supports schema {{ schema.latest_version }}.</p>
+  <p>Install an application version that supports schema {{ schema.current_version }}, then restart the web control center.</p>
+{% else %}
+  <h2>Check the database file</h2>
+  <p><code>{{ schema.path }}</code></p>
+  <p>{{ schema.error }}</p>
+{% endif %}
+</section>
+{% endblock %}

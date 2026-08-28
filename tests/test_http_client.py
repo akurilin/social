@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from crawler.contracts import HttpResponse, RobotsDenied
-from crawler.http import HttpClient
+from crawler.http import HttpClient, RenderedBrowserSession
 
 
 class HttpClientTests(unittest.TestCase):
@@ -28,6 +28,14 @@ class HttpClientTests(unittest.TestCase):
         with patch.object(client, "_can_fetch", return_value=False):
             with self.assertRaises(RobotsDenied):
                 client.post_json("https://example.com/api/events", {"page": 1})
+
+    def test_rendered_get_respects_robots_denial(self):
+        client = HttpClient()
+        session = RenderedBrowserSession(client)
+        session.page = object()
+        with patch.object(client, "_can_fetch", return_value=False):
+            with self.assertRaises(RobotsDenied):
+                session.get("https://example.com/events", ".event")
 
 
 if __name__ == "__main__":

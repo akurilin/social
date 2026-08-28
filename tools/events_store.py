@@ -40,8 +40,10 @@ COMMANDS
                legacy event array.
 
   needs-rank  [--days N] [--all] [--host X] [--grouped] [--json]
-  rank        --set ID=high [--set ID=low ...] | --file FILE
+  rank        --set ID=high [--set ID=ineligible ...] | --file FILE
   upcoming    [--days 10] [--min-rank medium] [--source-id X] [--json]
+  db-status   [--database FILE]
+  migrate-db  [--database FILE]
   catalog-check
   source-stats [--json]
   stats
@@ -67,8 +69,11 @@ ROOT = os.path.dirname(HERE)
 DB = os.environ.get("SOCIAL_DB", os.path.join(ROOT, "social.db"))
 SOURCES = os.path.join(ROOT, "sources.json")
 
-RANKS = ("high", "medium", "low")
-RANK_ORDER = {"high": 0, "medium": 1, "low": 2, None: 3}
+INELIGIBLE_RANK = "ineligible"
+RANKS = ("high", "medium", "low", INELIGIBLE_RANK)
+RANK_ORDER = {rank: index for index, rank in enumerate(RANKS)}
+UNRANKED_ORDER = len(RANKS)
+RANK_ORDER[None] = UNRANKED_ORDER
 SOURCE_STATES = {
     "ok", "ok_via_fallback", "empty_verified", "empty_suspicious",
     "parse_failed", "validation_failed", "fetch_failed", "auth_required",
@@ -78,7 +83,7 @@ LEGACY_SOURCE_STATES = SOURCE_STATES | {"not_due"}
 RETRY_STATES = {
     "empty_suspicious", "parse_failed", "validation_failed", "fetch_failed",
 }
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 VOLATILE_FIELDS = (
     "price", "is_free", "capacity_flag", "venue", "neighborhood",
@@ -97,6 +102,37 @@ EVENT_COLUMNS = (
     "fit_note", "rank", "format_tags_json", "capacity_flag", "catch",
     "status", "first_seen", "last_seen", "ranked_on",
 )
+
+EVENTS_MIGRATION_TABLE = "events_rank_migration"
+RANK_VALUES_SQL = ", ".join("'{}'".format(rank) for rank in RANKS)
+EVENTS_TABLE_COLUMNS_SQL = """
+    id TEXT PRIMARY KEY,
+    dedup_key TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    host TEXT NOT NULL DEFAULT '',
+    start TEXT NOT NULL,
+    end TEXT,
+    venue TEXT NOT NULL DEFAULT '',
+    neighborhood TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    signup_url TEXT NOT NULL DEFAULT '',
+    price TEXT NOT NULL DEFAULT '',
+    is_free INTEGER NOT NULL DEFAULT 0,
+    explicit_age_min INTEGER,
+    explicit_age_max INTEGER,
+    source_id TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    fit_note TEXT NOT NULL DEFAULT '',
+    rank TEXT CHECK (rank IN ({}) OR rank IS NULL),
+    format_tags_json TEXT NOT NULL DEFAULT '[]',
+    capacity_flag TEXT,
+    catch TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    ranked_on TEXT
+""".format(RANK_VALUES_SQL)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -135,32 +171,7 @@ CREATE TABLE IF NOT EXISTS source_runs (
 );
 
 CREATE TABLE IF NOT EXISTS events (
-    id TEXT PRIMARY KEY,
-    dedup_key TEXT NOT NULL UNIQUE,
-    url TEXT NOT NULL DEFAULT '',
-    title TEXT NOT NULL DEFAULT '',
-    host TEXT NOT NULL DEFAULT '',
-    start TEXT NOT NULL,
-    end TEXT,
-    venue TEXT NOT NULL DEFAULT '',
-    neighborhood TEXT NOT NULL DEFAULT '',
-    address TEXT NOT NULL DEFAULT '',
-    signup_url TEXT NOT NULL DEFAULT '',
-    price TEXT NOT NULL DEFAULT '',
-    is_free INTEGER NOT NULL DEFAULT 0,
-    explicit_age_min INTEGER,
-    explicit_age_max INTEGER,
-    source_id TEXT NOT NULL DEFAULT '',
-    description TEXT NOT NULL DEFAULT '',
-    fit_note TEXT NOT NULL DEFAULT '',
-    rank TEXT CHECK (rank IN ('high', 'medium', 'low') OR rank IS NULL),
-    format_tags_json TEXT NOT NULL DEFAULT '[]',
-    capacity_flag TEXT,
-    catch TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'active',
-    first_seen TEXT NOT NULL,
-    last_seen TEXT NOT NULL,
-    ranked_on TEXT
+__EVENTS_TABLE_COLUMNS__
 );
 
 CREATE TABLE IF NOT EXISTS event_urls (
@@ -210,12 +221,55 @@ WHERE NOT EXISTS (
       AND (nr.started_at > r.started_at
            OR (nr.started_at = r.started_at AND newer.run_id > sr.run_id))
 ) AND r.state = 'completed';
-"""
+""".replace("__EVENTS_TABLE_COLUMNS__", EVENTS_TABLE_COLUMNS_SQL)
 
 
 # ---------------------------------------------------------------- database
 
+def database_schema_status(path=DB):
+    """Read the schema version without creating or changing the database."""
+    status = {
+        "path": os.fspath(path),
+        "current_version": None,
+        "latest_version": SCHEMA_VERSION,
+    }
+    if path == ":memory:" or not os.path.exists(path):
+        status["state"] = "uninitialized"
+        return status
+    con = None
+    try:
+        con = sqlite3.connect(path)
+        current = con.execute("PRAGMA user_version").fetchone()[0]
+        has_schema = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name IN ('runs', 'events') LIMIT 1"
+        ).fetchone()
+    except sqlite3.Error as exc:
+        status.update(state="error", error=str(exc))
+        return status
+    finally:
+        if con is not None:
+            con.close()
+    if current == 0 and not has_schema:
+        status["state"] = "uninitialized"
+        return status
+    status["current_version"] = current
+    if current < SCHEMA_VERSION:
+        status["state"] = "behind"
+    elif current > SCHEMA_VERSION:
+        status["state"] = "ahead"
+    else:
+        status["state"] = "current"
+    return status
+
+
 def connect(path=DB):
+    status = database_schema_status(path)
+    if status["state"] == "ahead":
+        raise RuntimeError(
+            "database schema {} is newer than supported schema {}".format(
+                status["current_version"], SCHEMA_VERSION)
+        )
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
@@ -230,8 +284,59 @@ def connect(path=DB):
     return con
 
 
+def migrate_database(path=DB):
+    """Apply all pending database migrations and return the version change."""
+    before = database_schema_status(path)
+    if before["state"] == "error":
+        raise RuntimeError(before["error"])
+    con = connect(path)
+    con.close()
+    after = database_schema_status(path)
+    if after["state"] != "current":
+        raise RuntimeError("database migration did not reach the latest schema")
+    return before, after
+
+
 def column_names(con, table):
     return {row[1] for row in con.execute("PRAGMA table_info({})".format(table))}
+
+
+def migrate_event_rank_constraint(con):
+    """Replace the events table so SQLite accepts the new rank."""
+    table = con.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
+    ).fetchone()
+    if table and INELIGIBLE_RANK in (table[0] or ""):
+        return
+
+    columns = ", ".join(EVENT_COLUMNS)
+    con.commit()
+    con.execute("PRAGMA foreign_keys = OFF")
+    try:
+        con.execute("BEGIN")
+        con.execute(
+            "CREATE TABLE {} ({})".format(
+                EVENTS_MIGRATION_TABLE, EVENTS_TABLE_COLUMNS_SQL)
+        )
+        con.execute(
+            "INSERT INTO {} ({}) SELECT {} FROM events".format(
+                EVENTS_MIGRATION_TABLE, columns, columns)
+        )
+        con.execute("DROP TABLE events")
+        con.execute(
+            "ALTER TABLE {} RENAME TO events".format(EVENTS_MIGRATION_TABLE)
+        )
+        # A table rebuild removes its indexes, so restore the event indexes.
+        con.execute("CREATE INDEX idx_events_start ON events(start)")
+        con.execute("CREATE INDEX idx_events_source ON events(source_id)")
+        if con.execute("PRAGMA foreign_key_check").fetchone():
+            raise sqlite3.IntegrityError("event rank migration broke a foreign key")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.execute("PRAGMA foreign_keys = ON")
 
 
 def migrate_schema(con):
@@ -251,6 +356,8 @@ def migrate_schema(con):
             con.execute("ALTER TABLE events ADD COLUMN explicit_age_min INTEGER")
         if "explicit_age_max" not in event_columns:
             con.execute("ALTER TABLE events ADD COLUMN explicit_age_max INTEGER")
+    migrate_event_rank_constraint(con)
+    with con:
         for row in con.execute(
                 "SELECT id, url, source_id, first_seen, last_seen FROM events"):
             upsert_event_alias(
@@ -1856,7 +1963,8 @@ def cmd_rank(args):
 def cmd_upcoming(args):
     lo = today()
     hi = lo + dt.timedelta(days=args.days)
-    floor = RANK_ORDER.get(args.min_rank, 3) if args.min_rank else 3
+    floor = (RANK_ORDER.get(args.min_rank, UNRANKED_ORDER)
+             if args.min_rank else UNRANKED_ORDER)
     out = []
     for ev in load_store():
         if ev.get("status") == "cancelled":
@@ -1864,12 +1972,15 @@ def cmd_upcoming(args):
         sd = start_date(ev)
         if sd is None or sd < lo or sd > hi:
             continue
-        if RANK_ORDER.get(ev.get("rank"), 3) > floor:
+        if RANK_ORDER.get(ev.get("rank"), UNRANKED_ORDER) > floor:
             continue
         if args.source_id and ev.get("source_id") != args.source_id:
             continue
         out.append(ev)
-    out.sort(key=lambda e: (e.get("start") or "", RANK_ORDER.get(e.get("rank"), 3)))
+    out.sort(key=lambda e: (
+        e.get("start") or "",
+        RANK_ORDER.get(e.get("rank"), UNRANKED_ORDER),
+    ))
     if args.json:
         json.dump(out, sys.stdout, indent=1, ensure_ascii=False)
         print()
@@ -2002,7 +2113,7 @@ def cmd_stats(args):
         key = ev.get("rank") or "unranked"
         by_rank[key] = by_rank.get(key, 0) + 1
     print("\nupcoming by rank:")
-    for key in ("high", "medium", "low", "unranked"):
+    for key in RANKS + ("unranked",):
         if key in by_rank:
             print("  {:<9} {}".format(key, by_rank[key]))
     by_source = {}
@@ -2015,6 +2126,46 @@ def cmd_stats(args):
     unranked = sum(1 for ev in up if _needs_rank(ev))
     if unranked:
         print("\n{} upcoming events have never been ranked".format(unranked))
+    return 0
+
+
+def cmd_db_status(args):
+    status = database_schema_status(args.database)
+    state = status["state"]
+    if state == "uninitialized":
+        print("database is not initialized; latest schema is {}".format(
+            status["latest_version"]))
+        return 0
+    if state == "error":
+        print("database status failed: {}".format(status["error"]), file=sys.stderr)
+        return 1
+    print("database schema: {} (latest: {})".format(
+        status["current_version"], status["latest_version"]))
+    return 0 if state == "current" else 1
+
+
+def cmd_migrate_db(args):
+    status = database_schema_status(args.database)
+    if status["state"] == "ahead":
+        print(
+            "database schema {} is newer than supported schema {}; "
+            "update the application".format(
+                status["current_version"], status["latest_version"]),
+            file=sys.stderr,
+        )
+        return 1
+    if status["state"] == "error":
+        print("database migration failed: {}".format(status["error"]),
+              file=sys.stderr)
+        return 1
+    before, after = migrate_database(args.database)
+    if before["state"] == "current":
+        print("database schema is current: {}".format(after["current_version"]))
+        return 0
+    old_version = ("new" if before["current_version"] is None
+                   else before["current_version"])
+    print("database schema migrated: {} -> {}".format(
+        old_version, after["current_version"]))
     return 0
 
 
@@ -2084,6 +2235,14 @@ def main(argv=None):
     upcoming.add_argument("--source-id")
     upcoming.add_argument("--json", action="store_true")
     upcoming.set_defaults(fn=cmd_upcoming)
+
+    db_status = sub.add_parser("db-status")
+    db_status.add_argument("--database", default=DB)
+    db_status.set_defaults(fn=cmd_db_status)
+
+    migrate_db = sub.add_parser("migrate-db")
+    migrate_db.add_argument("--database", default=DB)
+    migrate_db.set_defaults(fn=cmd_migrate_db)
 
     catalog_check = sub.add_parser("catalog-check")
     catalog_check.set_defaults(fn=cmd_catalog_check)

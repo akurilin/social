@@ -2,14 +2,39 @@
 
 This repository collects factual event listings from a maintained source
 catalog, deduplicates them in SQLite, and then ranks their fit against a local
-set of personal criteria. Retrieval does not use the ranking criteria. A
-low-fit event stays in the event store with a low rank.
+set of personal criteria. Retrieval does not use the ranking criteria. Low-fit
+and ineligible events stay in the event store.
 
 The crawler framework is location-neutral. The project includes many event
 sources and ready-to-use adapters by default. The template catalog and some
 adapters currently target New York City. To use another city, replace or add
 sources, set the catalog timezone, and write local ranking criteria for that
 location.
+
+Install the Python packages and rendered-browser runtime:
+
+```sh
+python3 -m pip install -r requirements.txt
+python3 -m playwright install chromium
+```
+
+## Update the application
+
+After you pull application changes, check the local database schema:
+
+```sh
+python3 social.py db-status
+```
+
+Apply pending migrations with:
+
+```sh
+python3 social.py migrate
+```
+
+The web control center blocks data pages when `social.db` is old. It shows the
+current and required schema versions and the migration command. It does not
+change an old database during this check.
 
 ## 1. Set up the local source catalog
 
@@ -69,8 +94,8 @@ The skill performs the complete sync:
    writes their results to SQLite in stable source order. It uses Codex Desktop
    only for declared audits, fallbacks, or sources without adapters.
 3. It validates, stores, and deduplicates the factual events.
-4. It reads `EVENT_RANKING_CRITERIA.md` and ranks new events as high, medium, or
-   low fit.
+4. It reads `EVENT_RANKING_CRITERIA.md` and ranks new events as high, medium,
+   low, or ineligible.
 5. It leaves the completed run and events in `social.db`.
 
 If a run stops before completion, invoke the same skill again:

@@ -28,14 +28,19 @@ EVENT_SORTS = {
     "last_seen": "last_seen",
     "place": "COALESCE(NULLIF(neighborhood, ''), venue) COLLATE NOCASE",
     "source": "source_id COLLATE NOCASE",
-    "rank": "CASE rank WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
-            "WHEN 'low' THEN 3 ELSE 4 END",
+    "rank": ("CASE rank WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
+             "WHEN 'low' THEN 3 WHEN '{}' THEN 4 ELSE 5 END"
+             .format(events_store.INELIGIBLE_RANK)),
 }
 
 
 def add_minimum_rank_filter(where, params, rank):
     if rank == "unranked":
         where.append("rank IS NULL")
+    elif rank == events_store.INELIGIBLE_RANK:
+        # Ineligible is an access state, so the UI filters it as an exact value.
+        where.append("rank = ?")
+        params.append(events_store.INELIGIBLE_RANK)
     elif rank in events_store.RANKS:
         accepted_ranks = events_store.RANKS[:events_store.RANKS.index(rank) + 1]
         placeholders = ", ".join("?" for _ in accepted_ranks)
@@ -80,6 +85,9 @@ class Repository:
 
     def connect(self):
         return events_store.connect(self.db_path)
+
+    def database_schema_status(self):
+        return events_store.database_schema_status(self.db_path)
 
     def read_text(self, name):
         path = self._settings_path(name)

@@ -16,6 +16,8 @@ usage: python3 social.py <command>
 
 commands:
   web    start the local web control center (installs deps if missing)
+  migrate  apply pending social.db schema migrations
+  db-status  show the current and required database schema versions
   test   run all validation: catalog-check on sources.json, then the test suite
 
 `test` runs, in order:
@@ -54,6 +56,13 @@ def cmd_web():
     main()
 
 
+def run_store_command(command):
+    result = subprocess.run(
+        [sys.executable, "tools/events_store.py", command], cwd=ROOT)
+    if result.returncode:
+        sys.exit(result.returncode)
+
+
 def cmd_test():
     # Validation lives in two places; run both so there is exactly one
     # command to reach for after touching sources.json, tools/, or web/.
@@ -79,6 +88,10 @@ def main(argv):
     command = argv[0]
     if command == "web":
         cmd_web()
+    elif command == "migrate":
+        run_store_command("migrate-db")
+    elif command == "db-status":
+        run_store_command("db-status")
     elif command == "test":
         cmd_test()
     else:

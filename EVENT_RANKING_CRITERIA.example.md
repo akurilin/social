@@ -2,13 +2,14 @@
 
 Copy this file to `EVENT_RANKING_CRITERIA.md`, and replace the examples with your own criteria. The local file is ignored by Git.
 
-These criteria apply only after the crawler retrieves, validates, and deduplicates events. They do not control source selection, page retrieval, parsing, or factual ingestion. A poor-fit event stays in the event store with a low rank.
+These criteria apply only after the crawler retrieves, validates, and deduplicates events. They do not control source selection, page retrieval, parsing, or factual ingestion. Poor-fit and ineligible events stay in the event store.
 
 ## Ranking scale
 
 - **High:** A strong match for the positive criteria, with no hard conflict.
 - **Medium:** A possible match with missing evidence or an important tradeoff.
-- **Low:** A hard conflict, a poor match, or no useful evidence of fit.
+- **Low:** A hard fit conflict, a poor match, or no useful evidence of fit.
+- **Ineligible:** A stated access rule bars the person from joining.
 
 ## Who this is for
 
@@ -33,9 +34,14 @@ Example: An adult who wants nearby events that make it easy to meet people and t
 These rules cause a low rank. They do not cause retrieval rejection.
 
 - The format is passive and has no discussion or shared activity.
-- The attendee cannot join because of a stated access rule.
 - The time or travel requirement is not practical.
 - The event conflicts with a strong personal preference.
+
+## Automatic ineligible rules
+
+These rules cause an ineligible rank. They do not cause retrieval rejection.
+
+- A stated age, membership, invitation, or other access rule bars the person.
 
 ## Logistics
 

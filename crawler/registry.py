@@ -73,6 +73,10 @@ from crawler.adapters.secret_riso import (
     SecretRisoCalendarAdapter,
 )
 from crawler.adapters.sugary import ADAPTER_ID as SUGARY_ADAPTER_ID, SugaryAdapter
+from crawler.adapters.thursday_city import (
+    ADAPTER_ID as THURSDAY_CITY_ADAPTER_ID,
+    ThursdayCityAdapter,
+)
 
 
 ADAPTERS = {
@@ -97,6 +101,7 @@ ADAPTERS = {
     PIONEER_WORKS_ADAPTER_ID: PioneerWorksAdapter,
     SECRET_RISO_ADAPTER_ID: SecretRisoCalendarAdapter,
     SUGARY_ADAPTER_ID: SugaryAdapter,
+    THURSDAY_CITY_ADAPTER_ID: ThursdayCityAdapter,
 }
 
 

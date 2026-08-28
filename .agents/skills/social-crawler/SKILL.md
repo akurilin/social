@@ -95,7 +95,8 @@ python3 tools/events_store.py record-source --run-id RUN_ID --source-id SOURCE_I
 The command replaces any earlier staged result for that source. The run page then shows the source state and staged candidates before finalization.
 
 Put every factual event that matches the configured source scope and date window
-in `events`. Do this even when the event will probably have a low fit rank. Use
+in `events`. Do this even when the event will have a poor fit or the operator is
+not eligible. Use
 `rejections` only for factual or ingestion reasons, such as an event outside the
 configured window, an inactive or cancelled record, or missing required data.
 Do not reject an event because of its topic, format, likely crowd, access rule,
@@ -157,16 +158,18 @@ python3 tools/events_store.py needs-rank --grouped --json
 
 Judge each event against `EVENT_RANKING_CRITERIA.md`. Write:
 
-- `rank`: `high`, `medium`, or `low`
+- `rank`: `high`, `medium`, `low`, or `ineligible`
 - `fit_note`: likely room, social mechanism, and main tradeoff
 - `format_tags`: short event-format labels
 - `catch`: practical warning, when applicable
 
 Apply the assessments with `rank --file`. Do not treat promotional claims or attendance counts as evidence of good social structure.
 
-Rank an event `low` when it conflicts with a hard rule. Keep it in the event
-store, and explain the conflict in `fit_note` or `catch`. A fit decision must not
-change retrieval results, ingestion counts, or rejection records.
+Rank an event `ineligible` only when a stated access rule bars the operator, such
+as an age, membership, or invitation rule. Rank other hard fit conflicts `low`.
+Keep both in the event store, and explain the conflict in `fit_note` or `catch`.
+A fit decision must not change retrieval results, ingestion counts, or rejection
+records.
 
 ## Safety
 

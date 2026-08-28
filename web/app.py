@@ -5,7 +5,7 @@ import datetime as dt
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,6 +25,28 @@ CORE_SOURCE_FIELDS = {
     "retrieval_profile", "enabled", "disabled_reason", "health", "history",
     "events", "catalog_kind", "added_on",
 }
+DATABASE_MIGRATION_COMMAND = "python3 social.py migrate"
+templates = Jinja2Templates(directory=WEB_ROOT / "templates")
+
+
+async def require_current_database_schema(request, call_next):
+    if request.url.path.startswith("/static/"):
+        return await call_next(request)
+    schema = request.app.state.repo.database_schema_status()
+    if schema["state"] in {"behind", "ahead", "error"}:
+        # Block data routes because a mismatched schema can return wrong data.
+        return templates.TemplateResponse(
+            request=request,
+            name="database_migration_required.html",
+            context={
+                "request": request,
+                "schema": schema,
+                "migration_command": DATABASE_MIGRATION_COMMAND,
+                "title": "Database update required",
+            },
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    return await call_next(request)
 
 
 def create_app(root=ROOT, db_path=None):
@@ -33,12 +55,12 @@ def create_app(root=ROOT, db_path=None):
         description="Manage event discovery sources, runs, events, and crawler instructions.",
     )
     application.state.repo = Repository(root=root, db_path=db_path)
+    application.middleware("http")(require_current_database_schema)
     application.mount("/static", StaticFiles(directory=WEB_ROOT / "static"), name="static")
     return application
 
 
 app = create_app()
-templates = Jinja2Templates(directory=WEB_ROOT / "templates")
 
 
 def repo(request):

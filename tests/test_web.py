@@ -1,6 +1,7 @@
 import json
 import datetime as dt
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -130,6 +131,31 @@ class WebControlCenterTests(unittest.TestCase):
 
         run_response = self.client.get("/runs/run-one")
         self.assertIn("Existing events", run_response.text)
+
+    def test_old_database_shows_migration_instructions_until_updated(self):
+        old_version = events_store.SCHEMA_VERSION - 1
+        con = sqlite3.connect(str(self.database))
+        con.execute("PRAGMA user_version = {}".format(old_version))
+        con.close()
+
+        blocked = self.client.get("/")
+        with sqlite3.connect(str(self.database)) as con:
+            version_while_blocked = con.execute(
+                "PRAGMA user_version").fetchone()[0]
+
+        self.assertEqual(blocked.status_code, 503)
+        self.assertIn("Database update required", blocked.text)
+        self.assertIn("schema {}".format(old_version), blocked.text)
+        self.assertIn(
+            "schema {}".format(events_store.SCHEMA_VERSION), blocked.text)
+        self.assertIn("python3 social.py migrate", blocked.text)
+        self.assertEqual(version_while_blocked, old_version)
+
+        events_store.migrate_database(str(self.database))
+        updated = self.client.get("/")
+
+        self.assertEqual(updated.status_code, 200)
+        self.assertIn("What the crawler knows", updated.text)
 
     def test_active_run_page_shows_staged_database_candidates(self):
         con = events_store.connect(str(self.database))
@@ -518,9 +544,16 @@ class WebControlCenterTests(unittest.TestCase):
             "url": "https://example.com/events/low-fit-gathering",
             "rank": "low",
         }, dt.date.today().isoformat())
+        ineligible_event = events_store.normalise_incoming({
+            "source_id": "source-one", "title": "Members-only gathering",
+            "start": self.month + "-16T17:00:00-04:00",
+            "url": "https://example.com/events/members-only-gathering",
+            "rank": events_store.INELIGIBLE_RANK,
+        }, dt.date.today().isoformat())
         con = events_store.connect(str(self.database))
         with con:
             events_store.upsert_event(con, low_event)
+            events_store.upsert_event(con, ineligible_event)
             con.execute(
                 "UPDATE events SET rank = 'medium' WHERE title = 'A social dinner'")
             con.execute(
@@ -533,8 +566,13 @@ class WebControlCenterTests(unittest.TestCase):
         low_list = app.state.repo.list_events(rank="low")
         medium_list = app.state.repo.list_events(rank="medium")
         high_list = app.state.repo.list_events(rank="high")
+        ineligible_list = app.state.repo.list_events(
+            rank=events_store.INELIGIBLE_RANK)
         low_calendar = app.state.repo.calendar_events(
             month_start.isoformat(), month_end.isoformat(), rank="low")
+        ineligible_calendar = app.state.repo.calendar_events(
+            month_start.isoformat(), month_end.isoformat(),
+            rank=events_store.INELIGIBLE_RANK)
 
         self.assertEqual(
             {"Low fit gathering", "A social dinner", "Zine workshop"},
@@ -549,8 +587,16 @@ class WebControlCenterTests(unittest.TestCase):
             {event["title"] for event in high_list},
         )
         self.assertEqual(
+            {"Members-only gathering"},
+            {event["title"] for event in ineligible_list},
+        )
+        self.assertEqual(
             {"Low fit gathering", "A social dinner", "Zine workshop"},
             {event["title"] for event in low_calendar},
+        )
+        self.assertEqual(
+            {"Members-only gathering"},
+            {event["title"] for event in ineligible_calendar},
         )
 
     def test_fit_filter_labels_describe_minimum_rank(self):
@@ -561,6 +607,7 @@ class WebControlCenterTests(unittest.TestCase):
                 self.assertIn("High or higher", response.text)
                 self.assertIn("Medium or higher", response.text)
                 self.assertIn("Low or higher", response.text)
+                self.assertIn("Ineligible only", response.text)
 
     def test_auto_submit_script_handles_changes_and_debounced_search(self):
         response = self.client.get("/static/app.js")
