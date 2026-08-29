@@ -11,6 +11,8 @@ adapters currently target New York City. To use another city, replace or add
 sources, set the catalog timezone, and write local ranking criteria for that
 location.
 
+![Web control center event list grouped by day](docs/images/events-list.jpg)
+
 Install the Python packages and rendered-browser runtime:
 
 ```sh
