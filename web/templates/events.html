@@ -29,13 +29,13 @@
       <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th>
       {% endfor %}
     </tr></thead>
-    <tbody>{% set day_group = namespace(previous='') %}{% for event in events %}<tr{% if sort == 'start' and event.start[:10] != day_group.previous %} class="day-start"{% endif %}>
+    <tbody>{% set day_group = namespace(previous='') %}{% for event in events %}{% if sort == 'start' and event.start_day != day_group.previous %}<tr class="event-day-divider"><th colspan="8" scope="rowgroup"><time datetime="{{ event.start_day }}">{{ event.start_day_label }}</time></th></tr>{% endif %}<tr class="event-row{% if loop.index is even %} event-row-alt{% endif %}">
       <td class="wide-cell"><a class="row-link" href="/events/{{ event.id }}"><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</a><small>{{ event.host or 'Host unknown' }}</small></td>
       <td class="event-link-cell">{% if event.url %}<a class="event-list-link" href="{{ event.url }}" target="_blank" rel="noopener" aria-label="View original event for {{ event.title }}" title="View original event"><span aria-hidden="true">↗</span></a>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="event-date-cell">{{ event.start[:16]|replace('T', ' ') }}</td><td class="event-date-cell">{{ event.first_seen or '—' }}</td><td class="event-date-cell">{{ event.last_seen or '—' }}</td><td>{{ event.neighborhood or event.venue or '—' }}</td>
+      <td class="event-date-cell"><time datetime="{{ event.start }}">{% if sort == 'start' %}{{ event.start_time_label }}{% else %}{{ event.start[:16]|replace('T', ' ') }}{% endif %}</time></td><td class="event-date-cell">{{ event.first_seen or '—' }}</td><td class="event-date-cell">{{ event.last_seen or '—' }}</td><td>{{ event.neighborhood or event.venue or '—' }}</td>
       <td><a href="/source?source_id={{ event.source_id|urlencode }}">{{ event.source_id or '—' }}</a></td>
       <td>{{ badge(event.rank or 'unranked') }}</td>
-    </tr>{% set day_group.previous = event.start[:10] %}{% else %}<tr><td colspan="8"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
+    </tr>{% set day_group.previous = event.start_day %}{% else %}<tr><td colspan="8"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endblock %}

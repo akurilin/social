@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }} · Social Crawler</title>
   <meta name="description" content="Control center for the social event crawler">
-  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=16">
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
 </head>
 <body{% if wide %} class="wide-page"{% endif %}>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -39,6 +39,6 @@
       {% block content %}{% endblock %}
     </main>
   </div>
-  <script src="{{ url_for('static', path='/app.js') }}?v=6" defer></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v={{ static_asset_versions['app.js'] }}" defer></script>
 </body>
 </html>

@@ -167,9 +167,10 @@ th { padding: 10px 13px; background: #f1f0e9; color: var(--muted); font: 700 9px
 td { padding: 12px 13px; border-top: 1px solid var(--line); vertical-align: top; }
 tbody tr:first-child td { border-top: 0; }
 tbody tr:hover td { background: #faf9f4; }
-.events-table tbody tr:nth-child(even) td { background: #f6f5ef; }
-.events-table tbody tr:hover td { background: #ecebe4; }
-.events-table tbody tr.day-start td { border-top: 3px solid var(--line-strong); }
+.events-table tbody tr.event-row-alt td { background: #f6f5ef; }
+.events-table tbody tr.event-row:hover td { background: #ecebe4; }
+/* Separate each date from the event-row stripe pattern. */
+.events-table .event-day-divider th { padding: 9px 13px; border-top: 3px solid var(--accent); border-bottom: 1px solid #a7c7b5; background: var(--accent-soft); color: var(--accent-dark); font-size: 11px; letter-spacing: .035em; text-transform: none; }
 .events-table .event-date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
 td small { display: block; max-width: 240px; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .wide-cell { min-width: 210px; max-width: 420px; }

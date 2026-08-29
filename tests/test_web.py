@@ -66,6 +66,8 @@ class WebControlCenterTests(unittest.TestCase):
             zine_day = month_start + dt.timedelta(days=3)
         self.month = zine_day.strftime("%Y-%m")
         self.month_name = zine_day.strftime("%B %Y")
+        self.dinner_day = dinner_day
+        self.zine_day = zine_day
         run_date = (today - dt.timedelta(days=6)).isoformat()
         later_seen_date = (today - dt.timedelta(days=2)).isoformat()
         event = events_store.normalise_incoming({
@@ -221,12 +223,49 @@ class WebControlCenterTests(unittest.TestCase):
         )
         self.assertIn('aria-sort="ascending"', response.text)
 
-    def test_event_list_marks_day_boundaries_when_sorted_by_start(self):
+    def test_event_list_groups_start_sort_by_day_and_uses_12_hour_times(self):
         chronological = self.client.get("/events?period=all&sort=start&dir=asc")
         alphabetical = self.client.get("/events?period=all&sort=title&dir=asc")
 
-        self.assertEqual(2, chronological.text.count('class="day-start"'))
-        self.assertNotIn('class="day-start"', alphabetical.text)
+        dinner_label = "{} {}, {}".format(
+            self.dinner_day.strftime("%A, %B"),
+            self.dinner_day.day,
+            self.dinner_day.year,
+        )
+        self.assertEqual(
+            2, chronological.text.count('class="event-day-divider"'))
+        self.assertIn(
+            '<time datetime="{}">{}</time>'.format(
+                self.dinner_day.isoformat(), dinner_label),
+            chronological.text,
+        )
+        self.assertIn(
+            '<time datetime="{}T19:00:00-04:00">7:00 p.m.</time>'.format(
+                self.dinner_day.isoformat()),
+            chronological.text,
+        )
+        self.assertNotIn(
+            self.dinner_day.isoformat() + " 19:00", chronological.text)
+        self.assertNotIn('class="event-day-divider"', alphabetical.text)
+        self.assertIn(
+            ">{} 19:00</time>".format(self.dinner_day.isoformat()),
+            alphabetical.text,
+        )
+
+    def test_event_day_divider_differs_from_the_sort_header(self):
+        response = self.client.get("/static/app.css")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("border-top: 3px solid var(--accent)", response.text)
+        self.assertIn("background: var(--accent-soft)", response.text)
+
+    def test_pages_do_not_cache_the_stylesheet(self):
+        page_response = self.client.get("/events")
+        css_response = self.client.get("/static/app.css")
+
+        self.assertNotIn("/static/app.css?v=", page_response.text)
+        self.assertEqual(
+            "no-store", css_response.headers.get("cache-control"))
 
     def test_event_list_sorts_by_first_seen_in_both_directions(self):
         ascending = self.client.get("/events?sort=first_seen&dir=asc")

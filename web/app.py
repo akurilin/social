@@ -16,8 +16,18 @@ from .repository import PROBLEM_STATES, ROOT, Repository
 
 
 WEB_ROOT = Path(__file__).resolve().parent
+STATIC_ROOT = WEB_ROOT / "static"
+VERSIONED_STATIC_ASSET_NAMES = ("app.js",)
+STATIC_ASSET_VERSIONS = {
+    name: (STATIC_ROOT / name).stat().st_mtime_ns
+    for name in VERSIONED_STATIC_ASSET_NAMES
+}
+STYLESHEET_SUFFIX = ".css"
+NO_STORE_CACHE_CONTROL = "no-store"
 DEFAULT_EVENT_SORT = "start"
 DEFAULT_EVENT_SORT_DIRECTION = "asc"
+HOURS_PER_HALF_DAY = 12
+MERIDIEM_LABELS = ("a.m.", "p.m.")
 SORT_DIRECTIONS = {"asc", "desc"}
 SOURCE_SORTS = {"added_on"}
 CORE_SOURCE_FIELDS = {
@@ -27,6 +37,7 @@ CORE_SOURCE_FIELDS = {
 }
 DATABASE_MIGRATION_COMMAND = "python3 social.py migrate"
 templates = Jinja2Templates(directory=WEB_ROOT / "templates")
+templates.env.globals["static_asset_versions"] = STATIC_ASSET_VERSIONS
 
 
 async def require_current_database_schema(request, call_next):
@@ -49,6 +60,14 @@ async def require_current_database_schema(request, call_next):
     return await call_next(request)
 
 
+async def disable_stylesheet_cache(request, call_next):
+    # Always load current CSS while the control center is in development.
+    response = await call_next(request)
+    if request.url.path.endswith(STYLESHEET_SUFFIX):
+        response.headers["Cache-Control"] = NO_STORE_CACHE_CONTROL
+    return response
+
+
 def create_app(root=ROOT, db_path=None):
     application = FastAPI(
         title="Social Crawler Control Center",
@@ -56,7 +75,8 @@ def create_app(root=ROOT, db_path=None):
     )
     application.state.repo = Repository(root=root, db_path=db_path)
     application.middleware("http")(require_current_database_schema)
-    application.mount("/static", StaticFiles(directory=WEB_ROOT / "static"), name="static")
+    application.middleware("http")(disable_stylesheet_cache)
+    application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     return application
 
 
@@ -75,6 +95,24 @@ def page(request, template, **context):
     }
     base.update(context)
     return templates.TemplateResponse(request=request, name=template, context=base)
+
+
+def event_list_item(item):
+    # Add display fields so the grouped list does not parse dates in the template.
+    start = item["start"]
+    event_date = dt.date.fromisoformat(start[:10])
+    event_time = dt.datetime.fromisoformat(start).time()
+    display_hour = event_time.hour % HOURS_PER_HALF_DAY or HOURS_PER_HALF_DAY
+    display_minutes = ":{:02d}".format(event_time.minute)
+    meridiem = MERIDIEM_LABELS[event_time.hour // HOURS_PER_HALF_DAY]
+    return dict(
+        item,
+        start_day=event_date.isoformat(),
+        start_day_label="{} {}, {}".format(
+            event_date.strftime("%A, %B"), event_date.day, event_date.year),
+        start_time_label="{}{} {}".format(
+            display_hour, display_minutes, meridiem),
+    )
 
 
 async def form_values(request):
@@ -353,10 +391,10 @@ def events(request: Request):
     if sort not in {
             "title", "start", "first_seen", "last_seen", "place", "source", "rank"}:
         sort = DEFAULT_EVENT_SORT
-    items = repo(request).list_events(
+    items = [event_list_item(item) for item in repo(request).list_events(
         query, rank, period,
         selected_source_ids if source_filter_active else None,
-        sort, direction)
+        sort, direction)]
     filters = {
         "q": query, "rank": rank, "period": period,
     }
