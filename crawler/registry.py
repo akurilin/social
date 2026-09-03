@@ -24,6 +24,14 @@ from crawler.adapters.brooklyn_museum import (
     ADAPTER_ID as BROOKLYN_MUSEUM_ADAPTER_ID,
     BrooklynMuseumSearchAdapter,
 )
+from crawler.adapters.bored_dating import (
+    ADAPTER_ID as BORED_DATING_ADAPTER_ID,
+    BoredDatingAdapter,
+)
+from crawler.adapters.book_club_bar import (
+    ADAPTER_ID as BOOK_CLUB_BAR_ADAPTER_ID,
+    BookClubBarAdapter,
+)
 from crawler.adapters.endorphins import (
     ADAPTER_ID as ENDORPHINS_ADAPTER_ID,
     EndorphinsAdapter,
@@ -85,6 +93,8 @@ ADAPTERS = {
     ANTHOLOGY_ADAPTER_ID: AnthologyVeeziAdapter,
     ASTOR_CENTER_ADAPTER_ID: AstorCenterAdapter,
     BROOKLYN_MUSEUM_ADAPTER_ID: BrooklynMuseumSearchAdapter,
+    BORED_DATING_ADAPTER_ID: BoredDatingAdapter,
+    BOOK_CLUB_BAR_ADAPTER_ID: BookClubBarAdapter,
     CARREAU_CLUB_ADAPTER_ID: CarreauClubFridayMeleeAdapter,
     CASA_ITALIANA_ADAPTER_ID: CasaItalianaAdapter,
     ENDORPHINS_ADAPTER_ID: EndorphinsAdapter,
