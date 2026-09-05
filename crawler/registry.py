@@ -84,6 +84,10 @@ from crawler.adapters.pioneer_works import (
     ADAPTER_ID as PIONEER_WORKS_ADAPTER_ID,
     PioneerWorksAdapter,
 )
+from crawler.adapters.reading_rhythms import (
+    ADAPTER_ID as READING_RHYTHMS_ADAPTER_ID,
+    ReadingRhythmsAdapter,
+)
 from crawler.adapters.secret_riso import (
     ADAPTER_ID as SECRET_RISO_ADAPTER_ID,
     SecretRisoCalendarAdapter,
@@ -119,6 +123,7 @@ ADAPTERS = {
     NITEHAWK_ADAPTER_ID: NitehawkAdapter,
     OTHERSHIP_ADAPTER_ID: OthershipEventsAdapter,
     PIONEER_WORKS_ADAPTER_ID: PioneerWorksAdapter,
+    READING_RHYTHMS_ADAPTER_ID: ReadingRhythmsAdapter,
     SECRET_RISO_ADAPTER_ID: SecretRisoCalendarAdapter,
     SUGARY_ADAPTER_ID: SugaryAdapter,
     THURSDAY_CITY_ADAPTER_ID: ThursdayCityAdapter,
