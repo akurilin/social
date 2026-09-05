@@ -36,6 +36,10 @@ from crawler.adapters.endorphins import (
     ADAPTER_ID as ENDORPHINS_ADAPTER_ID,
     EndorphinsAdapter,
 )
+from crawler.adapters.danznik import (
+    ADAPTER_ID as DANZNIK_ADAPTER_ID,
+    DanznikAdapter,
+)
 from crawler.adapters.fabrik import (
     ADAPTER_ID as FABRIK_ADAPTER_ID,
     FabrikGatheringsAdapter,
@@ -98,6 +102,7 @@ ADAPTERS = {
     CARREAU_CLUB_ADAPTER_ID: CarreauClubFridayMeleeAdapter,
     CASA_ITALIANA_ADAPTER_ID: CasaItalianaAdapter,
     ENDORPHINS_ADAPTER_ID: EndorphinsAdapter,
+    DANZNIK_ADAPTER_ID: DanznikAdapter,
     FABRIK_ADAPTER_ID: FabrikGatheringsAdapter,
     GATHER_COMMUNITY_ADAPTER_ID: GatherCommunityCalendarAdapter,
     IIC_NEW_YORK_ADAPTER_ID: IICNewYorkEventsAdapter,
