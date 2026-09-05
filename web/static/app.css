@@ -171,7 +171,15 @@ tbody tr:hover td { background: #faf9f4; }
 .events-table tbody tr.event-row:hover td { background: #ecebe4; }
 /* Separate each date from the event-row stripe pattern. */
 .events-table .event-day-divider th { padding: 9px 13px; border-top: 3px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-size: 11px; letter-spacing: .035em; text-transform: none; }
-.event-day-status { float: right; margin-left: 16px; font: 500 10px/1.5 var(--sans); letter-spacing: 0; }
+/* Keep date text above the full-bar button so users can select it. */
+.events-table .event-day-divider th { position: relative; padding-right: 45px; }
+.event-day-divider time { position: relative; z-index: 1; cursor: text; user-select: text; }
+.event-day-toggle { position: absolute; inset: 0; width: 100%; display: flex; align-items: center; justify-content: flex-end; padding: 0 13px; border: 0; border-radius: 0; background: transparent; color: inherit; cursor: pointer; }
+.event-day-toggle:hover { background: rgb(0 0 0 / 4%); }
+.event-day-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.event-day-toggle svg { fill: none; stroke: currentColor; stroke-width: 2; }
+.event-day-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.events-table .event-row[hidden] { display: none; }
 .events-table .event-date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
 td small { display: block; max-width: 240px; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .wide-cell { min-width: 210px; max-width: 420px; }

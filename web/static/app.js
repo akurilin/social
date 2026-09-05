@@ -1,4 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Hide only this day's entries; keep the date bar available to reopen them.
+  document.querySelectorAll("[data-day-toggle]").forEach((button) => {
+    const divider = button.closest(".event-day-divider");
+    const dateLabel = divider.querySelector("time").textContent;
+    const rows = [];
+    let row = divider.nextElementSibling;
+    while (row?.classList.contains("event-row")) {
+      rows.push(row);
+      row = row.nextElementSibling;
+    }
+    button.addEventListener("click", (event) => {
+      // A text selection that ends over the button must not toggle the day.
+      const selection = window.getSelection();
+      if (event.detail && selection && !selection.isCollapsed
+          && selection.containsNode(divider, true)) return;
+      const expanded = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(expanded));
+      button.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${dateLabel}`);
+      rows.forEach((entry) => { entry.hidden = !expanded; });
+    });
+  });
+
   const coveragePanel = document.querySelector("[data-calendar-coverage]");
   if (coveragePanel) {
     const refreshButton = coveragePanel.querySelector("[data-refresh-calendar]");
