@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }} · Social Crawler</title>
   <meta name="description" content="Control center for the social event crawler">
+  <!-- Use the project image for browser tabs and saved shortcuts. -->
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', path='/icons/favicon.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', path='/icons/icon-192.png') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', path='/icons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', path='/site.webmanifest') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
 </head>
 <body{% if wide %} class="wide-page"{% endif %}>
@@ -12,7 +17,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <a class="brand" href="/">
-        <span class="brand-mark">SC</span>
+        <img class="brand-mark" src="{{ url_for('static', path='/icons/icon-192.png') }}" width="34" height="34" alt="">
         <span><strong>Social Crawler</strong><small>Control center</small></span>
       </a>
       <nav aria-label="Main navigation">

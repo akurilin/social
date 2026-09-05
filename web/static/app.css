@@ -36,7 +36,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
 .sidebar { position: sticky; top: 0; height: 100vh; padding: 24px 18px; background: var(--sidebar); color: white; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 11px; color: white; text-decoration: none; padding: 0 8px 28px; }
-.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #627268; border-radius: 9px; background: #2d3932; font: 700 12px/1 var(--mono); letter-spacing: .08em; }
+.brand-mark { display: block; flex-shrink: 0; width: 34px; height: 34px; border-radius: 9px; object-fit: contain; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 15px; letter-spacing: -.01em; }
 .brand small { margin-top: 2px; color: var(--sidebar-muted); font-size: 11px; }
