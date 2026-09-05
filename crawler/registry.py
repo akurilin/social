@@ -75,6 +75,10 @@ from crawler.adapters.new_york_social_network import (
     ADAPTER_ID as NEW_YORK_SOCIAL_NETWORK_ADAPTER_ID,
     NewYorkSocialNetworkAdapter,
 )
+from crawler.adapters.othership import (
+    ADAPTER_ID as OTHERSHIP_ADAPTER_ID,
+    OthershipEventsAdapter,
+)
 from crawler.adapters.out_there import ADAPTER_ID, OutThereAdapter
 from crawler.adapters.pioneer_works import (
     ADAPTER_ID as PIONEER_WORKS_ADAPTER_ID,
@@ -113,6 +117,7 @@ ADAPTERS = {
     MOMENCE_HOST_ADAPTER_ID: MomenceHostAdapter,
     NEW_YORK_SOCIAL_NETWORK_ADAPTER_ID: NewYorkSocialNetworkAdapter,
     NITEHAWK_ADAPTER_ID: NitehawkAdapter,
+    OTHERSHIP_ADAPTER_ID: OthershipEventsAdapter,
     PIONEER_WORKS_ADAPTER_ID: PioneerWorksAdapter,
     SECRET_RISO_ADAPTER_ID: SecretRisoCalendarAdapter,
     SUGARY_ADAPTER_ID: SugaryAdapter,
