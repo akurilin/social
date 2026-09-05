@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from .models import SourceEditorInput
+from .calendar_coverage import refresh_coverage
 from .repository import PROBLEM_STATES, ROOT, Repository
 
 
@@ -410,13 +411,31 @@ def events(request: Request):
     calendar_filters.update(source_filter_query(
         selected_source_ids, source_filter_active))
     calendar_url = query_url("/calendar", calendar_filters)
+    coverage = repo(request).calendar_coverage()
     return page(
         request, "events.html", title="Events", events=items, query=query,
         rank=rank, period=period, sort=sort, direction=direction,
         **sources,
         sort_links=sort_links, calendar_url=calendar_url,
         calendar_nav_url=calendar_url,
+        coverage=coverage, coverage_by_date={day["date"]: day for day in coverage["days"]},
     )
+
+
+@app.post("/calendar-coverage/refresh")
+def refresh_calendar_coverage(request: Request):
+    # Only a local page action may read private calendars and start a model check.
+    origin = request.headers.get("origin")
+    if (request.headers.get("sec-fetch-site") == "cross-site"
+            or origin and origin != str(request.base_url).rstrip("/")):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Open this app to refresh.")
+    repository = repo(request)
+    if not repository.calendar_refresh_lock.acquire(blocking=False):
+        raise HTTPException(status.HTTP_409_CONFLICT, "A calendar check is already running.")
+    try:
+        return refresh_coverage(repository)
+    finally:
+        repository.calendar_refresh_lock.release()
 
 
 @app.get("/calendar", response_class=HTMLResponse)
@@ -437,6 +456,8 @@ def event_calendar(request: Request):
     for event in items:
         by_date.setdefault((event.get("start") or "")[:10], []).append(event)
     today = dt.date.today()
+    coverage = repo(request).calendar_coverage(today)
+    coverage_by_date = {day["date"]: day for day in coverage["days"]}
     cells = [[{
         "date": day,
         "iso": day.isoformat(),
@@ -445,6 +466,7 @@ def event_calendar(request: Request):
         "is_past": day < today,
         "is_today": day == today,
         "events": by_date.get(day.isoformat(), []),
+        "coverage": coverage_by_date.get(day.isoformat()),
     } for day in week] for week in weeks]
     previous_month = (month - dt.timedelta(days=1)).replace(day=1)
     next_month = (month + dt.timedelta(days=32)).replace(day=1)
@@ -456,6 +478,7 @@ def event_calendar(request: Request):
         "/calendar", dict(filters, month=month.strftime("%Y-%m")))
     return page(
         request, "calendar.html", title="Event calendar", wide=True,
+        coverage=coverage,
         month=month, month_label=month.strftime("%B %Y"), weeks=cells,
         event_count=sum(len(day["events"]) for week in cells for day in week
                         if day["in_month"]),

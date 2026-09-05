@@ -16,6 +16,7 @@
     <span class="button primary" aria-current="page">Calendar</span>
   </div>
 </header>
+{% include "calendar_coverage.html" %}
 
 <div class="calendar-filter-row">
   <form class="calendar-filters" method="get" data-auto-submit>
@@ -37,8 +38,9 @@
     {% for week in weeks %}
       <div class="calendar-grid calendar-week">
       {% for cell in week %}
-        <section class="calendar-day{% if not cell.in_month %} outside-month{% endif %}{% if cell.is_past %} past{% endif %}{% if cell.is_today %} today{% endif %}" data-date="{{ cell.iso }}" aria-label="{{ cell.date.strftime('%A, %B %-d, %Y') }}, {{ cell.events|length }} events">
+        <section class="calendar-day{% if not cell.in_month %} outside-month{% endif %}{% if cell.is_past %} past{% endif %}{% if cell.is_today %} today{% endif %}{% if cell.coverage %} coverage-{{ cell.coverage.state }}{% endif %}" data-date="{{ cell.iso }}" data-coverage-date="{{ cell.iso }}" aria-label="{{ cell.date.strftime('%A, %B %-d, %Y') }}, {{ cell.events|length }} events">
           <header class="calendar-day-head">
+            <span class="calendar-coverage-label" data-coverage-label>{{ cell.coverage.label if cell.coverage else '' }}</span>
             <time datetime="{{ cell.iso }}">{{ cell.day }}</time>
           </header>
           <div class="calendar-day-events">

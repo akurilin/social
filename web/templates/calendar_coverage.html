@@ -1,0 +1,24 @@
+<section class="coverage-panel" aria-label="Social plans for the next 14 days" data-calendar-coverage>
+  <div class="coverage-head">
+    <div><h2>Social plans <span>Next 14 days · {{ coverage.window_label }}</span></h2>
+      <p data-coverage-message role="status">{{ coverage.message }}</p>
+    </div>
+    <button type="button" class="button secondary" data-refresh-calendar>Refresh calendar</button>
+  </div>
+  <div class="coverage-days">
+    {% for day in coverage.days %}
+    <div class="coverage-tile coverage-{{ day.state }}" data-coverage-date="{{ day.date }}" title="{{ day.date }}: {{ day.label }}">
+      <time class="coverage-date" datetime="{{ day.date }}"><span>{{ day.weekday }}</span><strong>{{ day.short_date }}</strong></time>
+      <span class="coverage-symbol" aria-hidden="true">{{ '✓' if day.state == 'planned' else '–' if day.state == 'open' else '·' }}</span>
+      <span class="sr-only" data-coverage-label>{{ day.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="coverage-foot">
+    <div class="coverage-legend" aria-label="Day colors">
+      <span class="coverage-planned">Social plan</span><span class="coverage-open">No social plan found</span><span class="coverage-unknown">Unchecked / unavailable</span>
+    </div>
+    <span class="coverage-updated" data-coverage-updated>{% if coverage.checked_at %}Last check: <time datetime="{{ coverage.checked_at }}">{{ coverage.checked_at[:16]|replace('T', ' ') }}</time>{% endif %}</span>
+  </div>
+  <noscript><p>Enable JavaScript to refresh your calendar.</p></noscript>
+</section>

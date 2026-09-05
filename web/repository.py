@@ -1,6 +1,8 @@
 import datetime as dt
+from contextlib import closing
 import json
 import os
+import threading
 from pathlib import Path
 
 
@@ -14,6 +16,7 @@ if str(TOOLS) not in sys.path:
 
 import events_store
 from web.event_theme import event_theme_emoji
+from web.calendar_coverage import coverage_view
 
 
 PROBLEM_STATES = {
@@ -82,6 +85,24 @@ class Repository:
             self.root / ".agents" / "skills" / "social-crawler" / "SKILL.md"
         )
         self.cache_path = (self.root / ".cache").resolve()
+        self.calendar_refresh_lock = threading.Lock()
+
+    def load_calendar_coverage(self):
+        with closing(self.connect()) as con:
+            row = con.execute(
+                "SELECT snapshot_json FROM calendar_coverage WHERE id = 1").fetchone()
+        return json_value(row["snapshot_json"], None) if row else None
+
+    def save_calendar_coverage(self, snapshot):
+        # Keep only day states; personal calendar contents stay out of the event store.
+        with closing(self.connect()) as con, con:
+            con.execute(
+                "INSERT INTO calendar_coverage (id, snapshot_json) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET snapshot_json = excluded.snapshot_json",
+                (json.dumps(snapshot),))
+
+    def calendar_coverage(self, today=None):
+        return coverage_view(self.load_calendar_coverage(), today or dt.date.today())
 
     def connect(self):
         return events_store.connect(self.db_path)

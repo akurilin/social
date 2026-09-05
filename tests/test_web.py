@@ -233,7 +233,7 @@ class WebControlCenterTests(unittest.TestCase):
             self.dinner_day.year,
         )
         self.assertEqual(
-            2, chronological.text.count('class="event-day-divider"'))
+            2, chronological.text.count('class="event-day-divider'))
         self.assertIn(
             '<time datetime="{}">{}</time>'.format(
                 self.dinner_day.isoformat(), dinner_label),
@@ -246,7 +246,7 @@ class WebControlCenterTests(unittest.TestCase):
         )
         self.assertNotIn(
             self.dinner_day.isoformat() + " 19:00", chronological.text)
-        self.assertNotIn('class="event-day-divider"', alphabetical.text)
+        self.assertNotIn('class="event-day-divider', alphabetical.text)
         self.assertIn(
             ">{} 19:00</time>".format(self.dinner_day.isoformat()),
             alphabetical.text,
@@ -256,8 +256,8 @@ class WebControlCenterTests(unittest.TestCase):
         response = self.client.get("/static/app.css")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("border-top: 3px solid var(--accent)", response.text)
-        self.assertIn("background: var(--accent-soft)", response.text)
+        self.assertIn("border-top: 3px solid var(--line-strong)", response.text)
+        self.assertIn("background: var(--coverage-bg)", response.text)
 
     def test_pages_do_not_cache_the_stylesheet(self):
         page_response = self.client.get("/events")

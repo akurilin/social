@@ -5,13 +5,14 @@ events_store.py — SQLite-backed event store and crawl ledger.
 Dependency-free (stdlib only). Python 3.8+.
 
 Static source configuration lives in sources.json. Dynamic state lives in
-social.db, using five tables only:
+social.db:
 
   runs          one active or completed crawl execution
   source_runs   one source planned or attempted during one run
   discoveries   one parsed or rejected event candidate from a source run
   events        canonical deduplicated event instances and their assessment
   event_urls    event-specific URL aliases for canonical event instances
+  calendar_coverage  latest manual check of daily social plans
 
 Large raw responses and screenshots stay in .cache; source_runs stores paths
 to those artifacts. Never hand-edit social.db — use this tool.
@@ -83,7 +84,7 @@ LEGACY_SOURCE_STATES = SOURCE_STATES | {"not_due"}
 RETRY_STATES = {
     "empty_suspicious", "parse_failed", "validation_failed", "fetch_failed",
 }
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 VOLATILE_FIELDS = (
     "price", "is_free", "capacity_flag", "venue", "neighborhood",
@@ -193,6 +194,11 @@ CREATE TABLE IF NOT EXISTS discoveries (
     outcome TEXT NOT NULL,
     rejection_reason TEXT,
     event_id TEXT REFERENCES events(id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_coverage (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    snapshot_json TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
