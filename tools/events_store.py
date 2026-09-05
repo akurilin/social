@@ -1110,8 +1110,33 @@ def minutes_apart(left, right):
     return abs(delta.total_seconds()) / 60
 
 
+MINDBODY_CART_HOST = "cart.mindbodyonline.com"
+MINDBODY_BOOKING_SUFFIX = "/cart/add_booking"
+MINDBODY_ITEM_ID = "item[mbo_id]"
+
+
+def mindbody_booking_identity(event):
+    """Read the studio and booking ID from a public Mindbody link."""
+    for value in (event.get("url"), event.get("signup_url")):
+        parsed = urlsplit(value or "")
+        if (parsed.hostname != MINDBODY_CART_HOST
+                or not parsed.path.endswith(MINDBODY_BOOKING_SUFFIX)):
+            continue
+        query = dict(parse_qsl(parsed.query))
+        if query.get(MINDBODY_ITEM_ID):
+            return parsed.path, query.get("item[type]"), query[MINDBODY_ITEM_ID]
+    return None
+
+
 def same_event_occurrence(incoming, candidate):
     """Use strong event facts to compare candidates that have different URLs."""
+    # Separate simultaneous classes, such as Lindy 100 and Lindy 150.
+    incoming_booking = mindbody_booking_identity(incoming)
+    candidate_booking = mindbody_booking_identity(candidate)
+    if (incoming_booking and candidate_booking
+            and incoming_booking[:2] == candidate_booking[:2]
+            and incoming_booking[2] != candidate_booking[2]):
+        return False
     distance = minutes_apart(incoming.get("start"), candidate.get("start"))
     title_score = text_similarity(incoming.get("title"), candidate.get("title"))
     if distance is None or distance > 30 or title_score < 0.88:
