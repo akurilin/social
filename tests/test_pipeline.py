@@ -659,6 +659,32 @@ class PipelineIntegrationTests(unittest.TestCase):
             self.assertEqual(counts, (1, 0, 1, 1))
             self.assertEqual(event_count, 2)
 
+    def test_super_rank_migration_keeps_events_and_aliases(self):
+        # Rebuild the old CHECK constraint without losing event links.
+        with tempfile.TemporaryDirectory() as tmp:
+            database = os.path.join(tmp, "social.db")
+            con = sqlite3.connect(database)
+            con.executescript(events_store.SCHEMA.replace("'super', ", ""))
+            event = events_store.normalise_incoming({
+                "title": "Kept event", "start": "2026-09-20T19:00:00",
+                "url": "https://example.com/events/kept-event", "rank": "high",
+                "source_id": "test-source",
+            }, "2026-09-16")
+            events_store.upsert_event(con, event)
+            con.commit()
+            con.close()
+            con = events_store.connect(database)
+            with con:
+                con.execute("UPDATE events SET rank='super' WHERE id=?", (event["id"],))
+            self.assertEqual("super", events_store.get_event(con, event["id"])["rank"])
+            self.assertEqual(1, con.execute("SELECT count(*) FROM event_urls").fetchone()[0])
+            self.assertEqual([], con.execute("PRAGMA foreign_key_check").fetchall())
+            con.close()
+            # Reopening must keep the migrated rank.
+            con = events_store.connect(database)
+            self.assertEqual("super", events_store.get_event(con, event["id"])["rank"])
+            con.close()
+
     def test_schema_migration_adds_current_fields_and_keeps_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             database = os.path.join(tmp, "social.db")

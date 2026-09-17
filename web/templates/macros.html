@@ -5,6 +5,7 @@
 {% macro fit_filter(rank) -%}
   <label><span>Fit</span><select name="rank">
     <option value="">Any rank</option>
+    <option value="super" {% if rank == 'super' %}selected{% endif %}>Super</option>
     <option value="high" {% if rank == 'high' %}selected{% endif %}>High or higher</option>
     <option value="medium" {% if rank == 'medium' %}selected{% endif %}>Medium or higher</option>
     <option value="low" {% if rank == 'low' %}selected{% endif %}>Low or higher</option>

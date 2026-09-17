@@ -6,6 +6,7 @@ These criteria apply only after the crawler retrieves, validates, and deduplicat
 
 ## Ranking scale
 
+- **Super:** A proven exceptional match under the personal rules below, with practical travel and no hard conflict.
 - **High:** A strong match for the positive criteria, with no hard conflict.
 - **Medium:** A possible match with missing evidence or an important tradeoff.
 - **Low:** A hard fit conflict, a poor match, or no useful evidence of fit.

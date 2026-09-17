@@ -31,9 +31,11 @@ EVENT_SORTS = {
     "last_seen": "last_seen",
     "place": "COALESCE(NULLIF(neighborhood, ''), venue) COLLATE NOCASE",
     "source": "source_id COLLATE NOCASE",
-    "rank": ("CASE rank WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
-             "WHEN 'low' THEN 3 WHEN '{}' THEN 4 ELSE 5 END"
-             .format(events_store.INELIGIBLE_RANK)),
+    # Use the shared rank order so filters and sorting agree.
+    "rank": ("CASE rank " + " ".join(
+        "WHEN '{}' THEN {}".format(rank, index)
+        for index, rank in enumerate(events_store.RANKS)
+    ) + " ELSE {} END".format(events_store.UNRANKED_ORDER)),
 }
 
 

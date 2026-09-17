@@ -96,7 +96,7 @@ The skill performs the complete sync:
    writes their results to SQLite in stable source order. It uses Codex Desktop
    only for declared audits, fallbacks, or sources without adapters.
 3. It validates, stores, and deduplicates the factual events.
-4. It reads `EVENT_RANKING_CRITERIA.md` and ranks new events as high, medium,
+4. It reads `EVENT_RANKING_CRITERIA.md` and ranks new events as super, high, medium,
    low, or ineligible.
 5. It leaves the completed run and events in `social.db`.
 

@@ -71,7 +71,7 @@ DB = os.environ.get("SOCIAL_DB", os.path.join(ROOT, "social.db"))
 SOURCES = os.path.join(ROOT, "sources.json")
 
 INELIGIBLE_RANK = "ineligible"
-RANKS = ("high", "medium", "low", INELIGIBLE_RANK)
+RANKS = ("super", "high", "medium", "low", INELIGIBLE_RANK)
 RANK_ORDER = {rank: index for index, rank in enumerate(RANKS)}
 UNRANKED_ORDER = len(RANKS)
 RANK_ORDER[None] = UNRANKED_ORDER
@@ -84,7 +84,7 @@ LEGACY_SOURCE_STATES = SOURCE_STATES | {"not_due"}
 RETRY_STATES = {
     "empty_suspicious", "parse_failed", "validation_failed", "fetch_failed",
 }
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 VOLATILE_FIELDS = (
     "price", "is_free", "capacity_flag", "venue", "neighborhood",
@@ -312,7 +312,7 @@ def migrate_event_rank_constraint(con):
     table = con.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='events'"
     ).fetchone()
-    if table and INELIGIBLE_RANK in (table[0] or ""):
+    if table and all("'{}'".format(rank) in (table[0] or "") for rank in RANKS):
         return
 
     columns = ", ".join(EVENT_COLUMNS)

@@ -158,10 +158,14 @@ python3 tools/events_store.py needs-rank --grouped --json
 
 Judge each event against `EVENT_RANKING_CRITERIA.md`. Write:
 
-- `rank`: `high`, `medium`, `low`, or `ineligible`
+- `rank`: `super`, `high`, `medium`, `low`, or `ineligible`
 - `fit_note`: likely room, social mechanism, and main tradeoff
 - `format_tags`: short event-format labels
 - `catch`: practical warning, when applicable
+
+Use `super` above `high` only when the local criteria support it. Keep personal
+qualification rules in `EVENT_RANKING_CRITERIA.md`, not application code. Apply
+travel and access constraints before assigning the final rank.
 
 Apply the assessments with `rank --file`. Do not treat promotional claims or attendance counts as evidence of good social structure.
 

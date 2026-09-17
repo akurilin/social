@@ -638,6 +638,22 @@ class WebControlCenterTests(unittest.TestCase):
             {event["title"] for event in ineligible_calendar},
         )
 
+    def test_super_fit_filters_sorts_and_renders(self):
+        # Super must survive storage and lead the fit order in both views.
+        with events_store.connect(str(self.database)) as con:
+            con.execute("UPDATE events SET rank='high' WHERE title='A social dinner'")
+            con.execute("UPDATE events SET rank='super' WHERE title='Zine workshop'")
+        ranked = app.state.repo.list_events(sort="rank", direction="asc")
+        self.assertEqual(["super", "high"], [event["rank"] for event in ranked])
+        self.assertEqual(2, len(app.state.repo.list_events(rank="high")))
+        self.assertEqual(1, len(app.state.repo.list_events(rank="super")))
+        for path in ("/events?rank=super", "/calendar?rank=super&month=" + self.month):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Zine workshop", response.text)
+            self.assertNotIn("A social dinner", response.text)
+            self.assertIn('value="super" selected', response.text)
+
     def test_fit_filter_labels_describe_minimum_rank(self):
         for path in ("/events", "/calendar?month=" + self.month):
             with self.subTest(path=path):

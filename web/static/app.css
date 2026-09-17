@@ -13,6 +13,8 @@
   --danger-soft: #f4dedb;
   --warning: #8a5a13;
   --warning-soft: #f4e8cf;
+  --super: #693d91;
+  --super-soft: #eee2f7;
   --blue: #315f79;
   --blue-soft: #dce9f0;
   --sidebar: #202924;
@@ -433,3 +435,9 @@ code { font-size: .92em; }
   .calendar-filters label, .calendar-filters .source-filter { min-width: 0; }
   .calendar-filters .source-filter { grid-column: 1 / -1; }
 }
+
+/* Mark the top fit tier in each event view. */
+.badge-super { border-color: var(--super); background: var(--super-soft); color: var(--super); }
+.calendar-legend .legend-super::before { background: var(--super); }
+.calendar-event.rank-super { background: var(--super-soft); color: var(--super); }
+.dialog-event.rank-super { border-left-color: var(--super); }
