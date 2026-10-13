@@ -18,6 +18,10 @@ class FetchError(CrawlerError):
     """The source could not be downloaded."""
 
 
+class RateLimited(FetchError):
+    """The server requires the crawler to stop requests for this run."""
+
+
 class RobotsDenied(CrawlerError):
     """The source does not permit this crawler path."""
 

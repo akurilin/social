@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -15,9 +16,11 @@ from crawler.contracts import (
 )
 from crawler.http import HttpClient
 from crawler.registry import get_adapter
+from crawler import sync_log
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_LOOKAHEAD_DAYS = 14
 
 
 def load_catalog(path=None):
@@ -45,7 +48,7 @@ def execute_source(source, catalog, seen_date, client=None, artifact_root=None):
         payload = adapter.crawl(
             source=source,
             seen_date=seen_date,
-            lookahead_days=int(run_config.get("lookahead_days", 10)),
+            lookahead_days=int(run_config.get("lookahead_days", DEFAULT_LOOKAHEAD_DAYS)),
             timezone=run_config.get("timezone") or "America/New_York",
         )
         return validate_adapter_result(payload)
@@ -97,11 +100,15 @@ def run_planned_source(run_id, source_id, database, client=None, cache_root=None
 
     target_cache = Path(cache_root or os.environ.get("SOCIAL_CACHE", ROOT / ".cache")) \
         / run_id / source_id
-    payload = execute_source(
-        source, catalog, seen_date, client=client, artifact_root=target_cache)
+    with sync_log.span('source', run_id=run_id, source_id=source_id,
+                       adapter=source['adapter'], queue_seconds=0) as timing:
+        payload = execute_source(
+            source, catalog, seen_date, client=client, artifact_root=target_cache)
+        timing.update(state=payload['source']['state'], events=len(payload['events']),
+                      rejections=len(payload['rejections']))
     con = events_store.connect(database)
     try:
-        with con:
+        with sync_log.span('stage', run_id=run_id, source_id=source_id), con:
             event_count, rejection_count = events_store.stage_source_result(
                 con, run_id, source_id, payload)
     finally:
@@ -161,30 +168,37 @@ def run_planned_adapters(run_id, database, workers=4, cache_root=None,
     target_cache = Path(cache_root or os.environ.get(
         "SOCIAL_CACHE", ROOT / ".cache")) / run_id
 
-    def retrieve(source_id, source):
-        payload = execute(
-            source,
-            catalog,
-            seen_date,
-            artifact_root=target_cache / source_id,
-        )
-        return source_id, payload
+    batch_started = time.perf_counter()
+    sync_log.record('batch.started', run_id=run_id, workers=min(workers, len(jobs)), sources=len(jobs))
+
+    def retrieve(source_id, source, queued_at):
+        with sync_log.span('source', run_id=run_id, source_id=source_id,
+                           adapter=source['adapter'],
+                           queue_seconds=round(time.perf_counter() - queued_at, sync_log.SECONDS_PRECISION)) as timing:
+            payload = execute(
+                source, catalog, seen_date, artifact_root=target_cache / source_id)
+            timing.update(state=payload['source']['state'], events=len(payload['events']),
+                          rejections=len(payload['rejections']))
+        return source_id, payload, time.perf_counter()
 
     # Futures retrieve concurrently. Reading them in planned source order keeps
     # discovery insertion and later deduplication deterministic.
     with ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as pool:
-        futures = [(source_id, pool.submit(retrieve, source_id, source))
+        futures = [(source_id, pool.submit(retrieve, source_id, source, time.perf_counter()))
                    for source_id, source in jobs]
         con = events_store.connect(database)
         try:
             for source_id, future in futures:
                 try:
-                    completed_source_id, payload = future.result()
-                    with con:
+                    completed_source_id, payload, retrieved_at = future.result()
+                    with sync_log.span('stage', run_id=run_id, source_id=source_id,
+                                       stage_wait_seconds=round(time.perf_counter() - retrieved_at, sync_log.SECONDS_PRECISION)), con:
                         event_count, rejection_count = \
                             events_store.stage_source_result(
                                 con, run_id, completed_source_id, payload)
                 except Exception as error:  # Keep other planned sources moving.
+                    sync_log.record('source.execution_failed', run_id=run_id,
+                                    source_id=source_id, error_type=type(error).__name__)
                     summary["errors"].append({
                         "source_id": source_id,
                         "error": str(error),
@@ -199,4 +213,9 @@ def run_planned_adapters(run_id, database, workers=4, cache_root=None,
                 })
         finally:
             con.close()
+    summary['duration_seconds'] = round(time.perf_counter() - batch_started, sync_log.SECONDS_PRECISION)
+    summary['log_path'] = str(sync_log.log_path(run_id))
+    sync_log.record('batch.completed', run_id=run_id,
+                    duration_seconds=summary['duration_seconds'],
+                    staged=len(summary['results']), errors=len(summary['errors']))
     return summary

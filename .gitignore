@@ -16,3 +16,7 @@ social.db-wal
 .DS_Store
 __pycache__/
 *.pyc
+
+# Local credentials
+/.env
+/.playwright-mcp/

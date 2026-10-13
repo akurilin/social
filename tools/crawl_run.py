@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from crawler.runner import run_planned_adapters
 from tools import events_store
+from crawler import sync_log
 
 
 SUCCESS_STATES = {"ok", "empty_verified"}
@@ -28,6 +29,8 @@ def main(argv=None):
         help="maximum concurrent source retrievals (default: 4)",
     )
     args = parser.parse_args(argv)
+
+    print('Timing log: {}'.format(sync_log.log_path(args.run_id)), flush=True)
 
     try:
         summary = run_planned_adapters(
@@ -57,6 +60,8 @@ def main(argv=None):
           "non-procedural pending".format(
               len(summary["results"]), len(summary["errors"]),
               len(summary["skipped"])))
+    if 'duration_seconds' in summary:
+        print('Retrieval and staging: {:.3f} seconds'.format(summary['duration_seconds']))
     if summary["skipped"]:
         print("non-procedural sources: {}".format(
             ", ".join(summary["skipped"])))

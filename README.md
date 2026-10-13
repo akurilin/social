@@ -119,6 +119,30 @@ The default is four concurrent retrievals. Use `--workers N` to change the
 limit. Finalization remains separate so audits and non-procedural sources can
 finish first.
 
+### Sync timing logs
+
+On macOS, each run writes to
+`~/Library/Logs/SocialCrawler/sync-RUN_ID.jsonl`.
+Use `SOCIAL_LOG_DIR` to select another directory. On other systems the default
+is `$XDG_STATE_HOME/SocialCrawler/logs` (or `~/.local/state/SocialCrawler/logs`).
+Each file rotates at 5 MB and keeps three backups. Files have owner-only access.
+
+Logs record source retrieval, worker queue time, waits before saving, database
+save time, HTTP attempts, robots requests, browser loads, and deliberate waits.
+Durations use a monotonic clock. Request bodies, full URLs, headers, and event
+text are excluded. Parallel source times must not be added as elapsed run time.
+
+```sh
+python3 tools/sync_timing.py --run-id RUN_ID
+tail -f ~/Library/Logs/SocialCrawler/sync-RUN_ID.jsonl
+```
+
+CLI finalization and source recording also write phase timings. Pass
+`--run-id RUN_ID` to `events_store.py rank` to log ranking writes. After all
+new events have ranks, run `sync_timing.py --run-id RUN_ID --complete` to record
+total elapsed time, including manual audits, fallbacks, and ranking. The gap
+between measured phases includes agent work and idle time; it is not CPU time.
+
 ## 5. View the results
 
 Start the local web control center:

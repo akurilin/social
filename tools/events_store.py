@@ -67,6 +67,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from crawler import sync_log
 DB = os.environ.get("SOCIAL_DB", os.path.join(ROOT, "social.db"))
 SOURCES = os.path.join(ROOT, "sources.json")
 
@@ -1591,6 +1594,8 @@ def cmd_plan_run(args):
             return 1
         finally:
             con.close()
+        sync_log.record('sync.started', run_id=plan['run']['id'],
+                        sources=len(plan['sources']))
         json.dump(plan, sys.stdout, indent=2, ensure_ascii=False)
         print()
     return 0
@@ -2258,6 +2263,7 @@ def main(argv=None):
     rank = sub.add_parser("rank")
     rank.add_argument("--set", action="append")
     rank.add_argument("--file")
+    rank.add_argument("--run-id", help="associate ranking time with a sync log")
     rank.set_defaults(fn=cmd_rank)
 
     upcoming = sub.add_parser("upcoming")
@@ -2289,6 +2295,12 @@ def main(argv=None):
     if not getattr(args, "fn", None):
         parser.print_help()
         return 1
+    if args.cmd in {'finalize-run', 'record-source', 'rank'} and getattr(args, 'run_id', None):
+        with sync_log.span(args.cmd, run_id=args.run_id,
+                           source_id=getattr(args, 'source_id', None)) as timing:
+            result = args.fn(args)
+            timing['exit_code'] = result
+            return result
     return args.fn(args)
 
 

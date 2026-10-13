@@ -169,6 +169,13 @@ travel and access constraints before assigning the final rank.
 
 Apply the assessments with `rank --file`. Do not treat promotional claims or attendance counts as evidence of good social structure.
 
+Pass `--run-id RUN_ID` when writing ranks to include the write time in the sync
+log. After ranking, run `python3 tools/sync_timing.py --run-id RUN_ID --complete`.
+The log separates source retrieval, queue waits, saving, and finalization.
+On macOS it is in `~/Library/Logs/SocialCrawler/`. Wrap manual audits and
+fallbacks in `crawler.sync_log.span` with the run and source IDs when possible;
+otherwise label their elapsed time as agent work, not adapter retrieval.
+
 Rank an event `ineligible` only when a stated access rule bars the operator, such
 as an age, membership, or invitation rule. Rank other hard fit conflicts `low`.
 Keep both in the event store, and explain the conflict in `fit_note` or `catch`.

@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from http import HTTPStatus
 import time
 import urllib.error
 import urllib.request
 import urllib.robotparser
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
-from .contracts import FetchError, HttpResponse, RobotsDenied
+from .contracts import FetchError, HttpResponse, RobotsDenied, RateLimited
+from . import sync_log
 
 
 USER_AGENT = "NYCSocialEventCrawler/1.0"
 DEFAULT_MIN_INTERVAL_SECONDS = 0.25
 MILLISECONDS_PER_SECOND = 1000
+RETRY_DELAY_SECONDS = 0.25
 
 
 class HttpClient:
@@ -48,6 +51,14 @@ class HttpClient:
             headers={"Content-Type": "application/json"},
         )
 
+    def post_form(self, url, payload):
+        """Send public form data through the same robots and retry checks."""
+        self._ensure_allowed(url)
+        return self._request_with_retry(
+            url, method="POST", body=urlencode(payload).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
     def rendered_session(self):
         """Open one rate-limited browser session for rendered public pages."""
 
@@ -58,12 +69,15 @@ class HttpClient:
         for attempt in range(2):
             try:
                 return self._request(url, method=method, body=body, headers=headers)
+            except RateLimited:
+                raise
             except FetchError as error:
                 last_error = error
                 if attempt == 0:
-                    time.sleep(0.25)
+                    sync_log.wait(RETRY_DELAY_SECONDS, 'retry_wait')
         raise last_error
 
+    @sync_log.request_timing('http')
     def _request(self, url, method="GET", body=None, headers=None):
         self._wait_for_slot()
         request_headers = {
@@ -85,6 +99,8 @@ class HttpClient:
                     fetched_at=dt.datetime.now().astimezone().isoformat(timespec="seconds"),
                 )
         except urllib.error.HTTPError as error:
+            if error.code == HTTPStatus.TOO_MANY_REQUESTS:
+                raise RateLimited("HTTP {} for {}".format(error.code, url)) from error
             raise FetchError("HTTP {} for {}".format(error.code, url)) from error
         except urllib.error.URLError as error:
             raise FetchError("could not fetch {}: {}".format(url, error.reason)) from error
@@ -98,7 +114,7 @@ class HttpClient:
     def _wait_for_slot(self):
         wait = self.min_interval_seconds - (time.monotonic() - self._last_request_at)
         if wait > 0:
-            time.sleep(wait)
+            sync_log.wait(wait, 'throttle_wait')
 
     def _mark_request(self):
         self._last_request_at = time.monotonic()
@@ -112,6 +128,7 @@ class HttpClient:
             self._robots[origin] = rules
         return rules.can_fetch(self.user_agent, url)
 
+    @sync_log.request_timing('robots')
     def _load_robots(self, origin):
         robots_url = origin + "/robots.txt"
         request = urllib.request.Request(robots_url, headers={"User-Agent": self.user_agent})
@@ -174,6 +191,7 @@ class RenderedBrowserSession:
             self.playwright = None
         self.page = None
 
+    @sync_log.request_timing('browser')
     def get(self, url, ready_selector):
         """Return rendered HTML after the page exposes its ready marker."""
 

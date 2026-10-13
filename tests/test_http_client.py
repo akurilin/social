@@ -1,11 +1,28 @@
 import unittest
 from unittest.mock import patch
 
-from crawler.contracts import HttpResponse, RobotsDenied
+from crawler.contracts import HttpResponse, RobotsDenied, RateLimited
 from crawler.http import HttpClient, RenderedBrowserSession
 
 
 class HttpClientTests(unittest.TestCase):
+    def test_rate_limit_is_not_retried(self):
+        client = HttpClient()
+        with patch.object(client, "_request", side_effect=RateLimited("HTTP 429")) as request:
+            with self.assertRaises(RateLimited):
+                client._request_with_retry("https://example.com/events")
+        request.assert_called_once()
+
+    def test_http_429_has_a_typed_error(self):
+        from http import HTTPStatus
+        from urllib.error import HTTPError
+        client = HttpClient(min_interval_seconds=0)
+        url = "https://example.com/events"
+        error = HTTPError(url, HTTPStatus.TOO_MANY_REQUESTS, "Rate limited", {}, None)
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(RateLimited):
+                client._request(url)
+
     def test_post_json_uses_the_normal_guard_and_request_path(self):
         client = HttpClient()
         response = HttpResponse(
