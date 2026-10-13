@@ -45,13 +45,13 @@ class BookClubBarAdapterTests(unittest.TestCase):
         return (FIXTURES / "book_club_bar_listing.html").read_text()
 
     def crawl(self, html=None, lookahead=4):
-        return BookClubBarAdapter(Client(html if html is not None else self.listing())).crawl(
+        return BookClubBarAdapter(Client(html if html is not None else self.listing())).crawl_rendered(
             SOURCE, dt.date(2026, 9, 8), lookahead, "America/New_York")
 
     def test_inclusive_window_locations_ticket_link_and_artifacts(self):
         client = Client(self.listing())
         with tempfile.TemporaryDirectory() as directory:
-            result = BookClubBarAdapter(client, ArtifactRecorder(directory)).crawl(
+            result = BookClubBarAdapter(client, ArtifactRecorder(directory)).crawl_rendered(
                 SOURCE, dt.date(2026, 9, 8), 4, "America/New_York")
             artifact = result["source"]["artifacts"][0]
             self.assertTrue(Path(artifact["path"]).exists())
