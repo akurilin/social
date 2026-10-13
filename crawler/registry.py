@@ -1,5 +1,13 @@
 """Registry of procedural source adapters."""
 
+from crawler.adapters.art_collecting import (
+    ADAPTER_ID as ART_COLLECTING_ADAPTER_ID,
+    ArtCollectingAdapter,
+)
+from crawler.adapters.artrabbit import (
+    ADAPTER_ID as ARTRABBIT_ADAPTER_ID,
+    ArtRabbitAdapter,
+)
 from crawler.adapters.astor_center import (
     ADAPTER_ID as ASTOR_CENTER_ADAPTER_ID,
     AstorCenterAdapter,
@@ -32,6 +40,10 @@ from crawler.adapters.book_club_bar import (
     ADAPTER_ID as BOOK_CLUB_BAR_ADAPTER_ID,
     BookClubBarAdapter,
 )
+from crawler.adapters.big_apple_ballroom import (
+    ADAPTER_ID as BIG_APPLE_BALLROOM_ADAPTER_ID,
+    BigAppleBallroomAdapter,
+)
 from crawler.adapters.endorphins import (
     ADAPTER_ID as ENDORPHINS_ADAPTER_ID,
     EndorphinsAdapter,
@@ -55,6 +67,10 @@ from crawler.adapters.iic_new_york import (
 from crawler.adapters.lalliance import (
     ADAPTER_ID as LALLIANCE_ADAPTER_ID,
     LAllianceEventsAdapter,
+)
+from crawler.adapters.lightning_society import (
+    ADAPTER_ID as LIGHTNING_SOCIETY_ADAPTER_ID,
+    LightningSocietyFeedbinAdapter,
 )
 from crawler.adapters.luma import (
     ADAPTER_ID as LUMA_ADAPTER_ID,
@@ -99,7 +115,15 @@ from crawler.adapters.thursday_city import (
 )
 
 
+from crawler.adapters.nyc_culture_calendar import (
+    ADAPTER_ID as NYC_CULTURE_CALENDAR_ADAPTER_ID, NYCCultureCalendarAdapter,
+)
+
+
 ADAPTERS = {
+    ART_COLLECTING_ADAPTER_ID: ArtCollectingAdapter,
+    ARTRABBIT_ADAPTER_ID: ArtRabbitAdapter,
+    NYC_CULTURE_CALENDAR_ADAPTER_ID: NYCCultureCalendarAdapter,
     ADAPTER_ID: OutThereAdapter,
     ANALOG_FILM_NYC_ADAPTER_ID: AnalogFilmNYCAdapter,
     ANTHOLOGY_ADAPTER_ID: AnthologyVeeziAdapter,
@@ -107,6 +131,7 @@ ADAPTERS = {
     BROOKLYN_MUSEUM_ADAPTER_ID: BrooklynMuseumSearchAdapter,
     BORED_DATING_ADAPTER_ID: BoredDatingAdapter,
     BOOK_CLUB_BAR_ADAPTER_ID: BookClubBarAdapter,
+    BIG_APPLE_BALLROOM_ADAPTER_ID: BigAppleBallroomAdapter,
     CARREAU_CLUB_ADAPTER_ID: CarreauClubFridayMeleeAdapter,
     CASA_ITALIANA_ADAPTER_ID: CasaItalianaAdapter,
     ENDORPHINS_ADAPTER_ID: EndorphinsAdapter,
@@ -115,6 +140,7 @@ ADAPTERS = {
     GATHER_COMMUNITY_ADAPTER_ID: GatherCommunityCalendarAdapter,
     IIC_NEW_YORK_ADAPTER_ID: IICNewYorkEventsAdapter,
     LALLIANCE_ADAPTER_ID: LAllianceEventsAdapter,
+    LIGHTNING_SOCIETY_ADAPTER_ID: LightningSocietyFeedbinAdapter,
     LUMA_ADAPTER_ID: LumaCalendarAdapter,
     LUMA_CATEGORY_ADAPTER_ID: LumaCategoryAdapter,
     METROGRAPH_ADAPTER_ID: MetrographSpecialEventsAdapter,

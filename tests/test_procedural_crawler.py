@@ -249,6 +249,11 @@ class ProceduralPipelineTests(unittest.TestCase):
 
     def test_out_there_runs_through_existing_stage_and_finalize_contract(self):
         catalog = json.loads((ROOT / "sources.example.json").read_text(encoding="utf-8"))
+        # Fix the fixture window so local crawl settings cannot change its requests.
+        catalog["run_config"]["lookahead_days"] = 10
+        catalog_patch = mock.patch("crawler.runner.load_catalog", return_value=catalog)
+        catalog_patch.start()
+        self.addCleanup(catalog_patch.stop)
         plan = events_store.build_run_plan(
             catalog,
             latest_rows=[],

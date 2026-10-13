@@ -1,0 +1,17 @@
+{
+  "venues": [
+    {
+      "id": "barbes",
+      "name": "Barb\u00e8s",
+      "category": "music",
+      "neighborhood": "Park Slope",
+      "borough": "Brooklyn",
+      "address": "376 9th St, Brooklyn, NY 11215",
+      "lat": 40.6677,
+      "lng": -73.9854,
+      "url": "https://www.barbesbrooklyn.com/events",
+      "scraper": "barbes",
+      "notes": "Tiny back room for world, jazz, and folk - Slavic Soul Party, Brooklyn Maqam, Stephane Wrembel. Most shows donation-based or a small door charge."
+    }
+  ]
+}

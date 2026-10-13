@@ -4,7 +4,7 @@
   "revised": "2026-08-16",
   "description": "Agent-consumable source registry for social and cultural event discovery. The current catalog targets NYC, but each source independently declares its location, retrieval method, authentication needs, and parser expectations.",
   "run_config": {
-    "lookahead_days": 10,
+    "lookahead_days": 14,
     "timezone": "America/New_York",
     "dedup": {
       "strategy": "composite_key",
@@ -390,7 +390,7 @@
       "parse_hint": "The gather_community_calendar Python adapter reads the anonymous structured feed used by the public 57 community calendar. It paginates event entities for the requested date window, stores only sanitized event facts, and never retains member, profile, or reaction data or raw API responses. Community-submitted third-party and non-NYC events are valid candidates; normal deduplication and the later fit-ranking phase handle overlap, geography, access restrictions, and fit. Keep the browser calendar profile as the independent visible-page audit and fallback path.",
       "retrieval_profile": "browser-calendar-v1",
       "adapter": "gather_community_calendar",
-      "api_url": "https://atlas-web-gather57-7t7d9xgg1-gather-nyc.vercel.app/api/getPosts",
+      "api_url": "https://www.57.nyc/api/getPosts",
       "gather_group_id": "clfi9j47x0000rrrkyg1p32f5"
     },
     {
@@ -537,10 +537,12 @@
       "url": "https://www.lightningsociety.com/",
       "priority": 2,
       "geo": "Bushwick",
-      "parse_hint": "Opens to the public once or twice a month, so do not expect an event on every crawl. Watch for potlucks and open mics.",
+      "parse_hint": "Placeholder for Lightning Society newsletters forwarded to Feedbin. Match Lightning Society, admin@lightning.nyc, or the original newsletter content if forwarding changes the sender. Confirm the feed ID from a real sample. Use the official Feedbin API with FEEDBIN_EMAIL and FEEDBIN_PASSWORD from local .env; do not use browser retrieval. Extract separate events and verify dates, venues, and RSVP links; some facts may appear only in images. The existing public-site retrieval profile is retained only while this source is disabled; replace it with an API profile before activation.",
       "retrieval_profile": "http-calendar-v1",
       "enabled": false,
-      "disabled_reason": "Disabled because the public site has no dated event calendar or feed. Re-enable when Lightning Society publishes current dates through a public calendar or structured feed."
+      "disabled_reason": "Feedbin newsletter extraction is not implemented. Receive a Lightning Society newsletter in Feedbin, confirm its feed ID, then implement and test extraction through the official Feedbin API before enabling this source.",
+      "adapter": "lightning_society_feedbin",
+      "added_on": "2026-07-28"
     },
     {
       "id": "the-fifth-place",
