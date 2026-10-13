@@ -16,7 +16,7 @@ from crawler.contracts import ParseError, source_result
 
 
 ADAPTER_ID = "bored_dating"
-PARSER_VERSION = "bored-dating-v1"
+PARSER_VERSION = "bored-dating-v2"
 METHOD = "python_adapter"
 HOST = "Bored of Dating Apps"
 NYC_LOCALITIES = {"new york", "new york city", "brooklyn", "queens", "bronx",
@@ -167,11 +167,22 @@ def _display_start(value, year, timezone):
 def _is_nyc(record):
     location = record.get("location")
     address = location.get("address") if isinstance(location, dict) else None
-    if not isinstance(address, dict) or not address.get("addressLocality"):
+    if not isinstance(address, dict):
         raise ParseError("event has no structured locality")
-    locality = _clean(address["addressLocality"]).lower()
-    country = _clean(address.get("addressCountry", "")).lower()
-    return locality in NYC_LOCALITIES and country in {"", "us", "usa", "united states"}
+    locality = _clean(address.get("addressLocality") or "").lower()
+    country = _clean(address.get("addressCountry") or "").lower()
+    if country not in {"", "us", "usa", "united states"}:
+        return False
+    if locality:
+        return locality in NYC_LOCALITIES
+    # A full US postal address can supply the city when the city field is blank.
+    match = re.search(
+        r",\s*(New York(?: City)?|Manhattan|Brooklyn|Queens|(?:The )?Bronx|Staten Island)"
+        r",\s*(?:NY|New York)\s+\d{5}(?:-\d{4})?(?:,\s*(?:USA|US|United States))?\s*$",
+        _clean(address.get("streetAddress")), re.I)
+    if not match:
+        raise ParseError("event has no structured locality or validated NYC address")
+    return True
 
 
 def _event(record, listing_record, response, source, boda_url, event_id, timezone):

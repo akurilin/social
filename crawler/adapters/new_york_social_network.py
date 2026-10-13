@@ -9,14 +9,17 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
+from bs4 import BeautifulSoup
+
 from crawler.contracts import EventStub, FetchError, ParseError, source_result
 from crawler.jsonld import HtmlDocument, find_typed_nodes, load_json_ld
 
 
 ADAPTER_ID = "new_york_social_network"
-PARSER_VERSION = "nysn-event-espresso-jsonld-v1"
+PARSER_VERSION = "nysn-event-espresso-jsonld-v3"
 METHOD = "python_adapter"
 HOST = "New York Social Network"
+EVENT_HEADING_SELECTOR = "h1, h2.text-white.font-weight-bold.text-center"
 
 _QUICK_LIST = re.compile(
     r"<p[^>]*>\s*<strong[^>]*>\s*Upcoming\s+Events\s*</strong>\s*</p>"
@@ -198,10 +201,17 @@ def _parse_event(response, stub, source, timezone):
     for value in load_json_ld(document):
         nodes.extend(find_typed_nodes(value, "Event"))
     matching = [node for node in nodes if _same_event_url(node.get("url"), response.url)]
-    if len(matching) != 1:
+    # An external ticket URL is valid only for the single event named by this page.
+    if (not matching and len(nodes) == 1 and
+            urlsplit(str(nodes[0].get("url") or "")).netloc != urlsplit(response.url).netloc):
+        heading = BeautifulSoup(response.text, "html.parser").select_one(EVENT_HEADING_SELECTOR)
+        if heading and _clean(nodes[0].get("name")) == _clean(heading.get_text(" ", strip=True)):
+            matching = nodes
+    if len(matching) > 1 or (nodes and not matching):
         raise ParseError(
             "detail page must contain one Event JSON-LD node for its own URL")
-    raw = matching[0]
+    raw = dict(matching[0]) if matching else {}
+    raw, warnings = _visible_fallback(raw, response, timezone)
 
     title = _clean(raw.get("name"))
     start = _local_datetime(raw.get("startDate"), timezone, required=True)
@@ -210,15 +220,27 @@ def _parse_event(response, stub, source, timezone):
     location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
     venue = _clean(location.get("name"))
     address = _address(location.get("address"))
-    if not title or not start or not url or not venue or not address:
+    if not title or not start or not url or not venue:
         raise ParseError(
-            "Event JSON-LD is missing name, startDate, URL, venue, or address")
+            "Event JSON-LD is missing name, startDate, URL, or venue")
 
     status = _status(raw.get("eventStatus"))
     price, is_free, capacity = _offer_facts(raw.get("offers"))
     description = _clean_html(raw.get("description"))[:4000]
+    # Read ages only from this event; sidebars advertise unrelated events.
+    soup = BeautifulSoup(response.text, "html.parser")
+    for unrelated in soup.select("aside, nav, footer, .sidebar"):
+        unrelated.decompose()
+    body = soup.select_one(".entry-content")
+    age_text = body.get_text(" ", strip=True) if body else ""
+    # Older templates put the age rule in a separate heading and paragraph.
+    for heading in soup.select("h2, h3, h4"):
+        if heading.get_text(" ", strip=True).lower() == "age requirement":
+            value = heading.find_next_sibling("p")
+            if value:
+                age_text += " Age Requirement " + value.get_text(" ", strip=True)
     age_min, age_max, age_label = _age_facts(
-        "{} {} {}".format(title, description, document.text))
+        "{} {} {}".format(title, description, age_text))
     return {
         "title": title,
         "start": start,
@@ -241,11 +263,58 @@ def _parse_event(response, stub, source, timezone):
         "fetched_at": response.fetched_at,
         "parser_version": PARSER_VERSION,
         "content_hash": response.content_hash,
-        "extracted_json": raw,
+        "extracted_json": {**raw, "warnings": warnings},
         "explicit_age_min": age_min,
         "explicit_age_max": age_max,
         "explicit_age_label": age_label,
     }
+
+
+def _visible_fallback(raw, response, timezone):
+    """Fill absent structured facts from the event body and preserve conflicts."""
+    soup = BeautifulSoup(response.text, "html.parser")
+    root = soup.select_one("main") or soup
+    warnings = []
+    title = root.select_one(EVENT_HEADING_SELECTOR)
+    if not raw.get("name") and title:
+        raw["name"] = title.get_text(" ", strip=True)
+    raw["url"] = raw.get("url") or response.url
+    rows = root.select(".ee-event-datetimes-li")
+    if len(rows) == 1:
+        dates = rows[0].select_one(".ee-event-datetimes-li-daterange")
+        times = rows[0].select_one(".ee-event-datetimes-li-timerange")
+        date_values = re.findall(r"\d{2}/\d{2}/\d{4}", dates.get_text() if dates else "")
+        time_values = re.findall(r"\d{1,2}:\d{2}\s*[ap]m", times.get_text() if times else "", re.I)
+        if date_values and time_values:
+            def moment(day, clock):
+                text = "{} {}".format(day, _clean(clock))
+                return dt.datetime.strptime(text, "%m/%d/%Y %I:%M %p").replace(
+                    tzinfo=ZoneInfo(timezone)).isoformat()
+            visible_start = moment(date_values[0], time_values[0])
+            if raw.get("startDate") and _local_datetime(raw["startDate"], timezone, True) != visible_start:
+                raise ParseError("visible date/time conflicts with Event JSON-LD startDate")
+            raw["startDate"] = raw.get("startDate") or visible_start
+            if len(time_values) == 2:
+                visible_end = moment(date_values[-1], time_values[-1])
+                if raw.get("endDate") and _local_datetime(raw["endDate"], timezone, False) != visible_end:
+                    warnings.append("visible end date/time conflicts with Event JSON-LD")
+                elif not raw.get("endDate"):
+                    raw["endDate"] = visible_end
+            elif len(date_values) > 1 and date_values[0] != date_values[-1]:
+                warnings.append("visible date range spans multiple days but gives only one time")
+    elif not raw.get("startDate"):
+        raise ParseError("visible event date/time is missing or ambiguous")
+    location = dict(raw.get("location")) if isinstance(raw.get("location"), dict) else {}
+    venue = root.select_one('.espresso-venue-dv [itemprop="name"]')
+    if not location.get("name") and venue:
+        location["name"] = venue.get_text(" ", strip=True)
+    address = root.select_one('.espresso-venue-dv [itemprop="address"]')
+    if not _address(location.get("address")) and address:
+        location["address"] = address.get_text(" ", strip=True)
+    raw["location"] = location
+    if not _address(location.get("address")):
+        warnings.append("street address is not supplied; retain the stated venue")
+    return raw, warnings
 
 
 def _same_event_url(raw_url, response_url):

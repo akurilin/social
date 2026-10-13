@@ -13,9 +13,9 @@ from crawler.contracts import ParseError, source_result
 
 
 ADAPTER_ID = "gather_community_calendar"
-PARSER_VERSION = "gather-community-calendar-v1"
+PARSER_VERSION = "gather-community-calendar-v2"
 METHOD = "python_adapter"
-DEFAULT_API_URL = "https://atlas-web-gather57-7t7d9xgg1-gather-nyc.vercel.app/api/getPosts"
+DEFAULT_API_URL = "https://www.57.nyc/api/getPosts"
 GROUP_ID = "clfi9j47x0000rrrkyg1p32f5"
 PAGE_SIZE = 100
 

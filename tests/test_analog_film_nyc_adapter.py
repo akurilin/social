@@ -36,7 +36,7 @@ class AnalogFilmNYCAdapterTests(unittest.TestCase):
             result = AnalogFilmNYCAdapter(client, ArtifactRecorder(tmp)).crawl(
                 self.source(), dt.date(2026, 8, 16), 2, "America/New_York")
         self.assertEqual(client.requests, [SOURCE_URL])
-        self.assertEqual(result["source"]["state"], "ok")
+        self.assertEqual(result["source"]["state"], "validation_failed")
         self.assertEqual(result["source"]["recipe_version"], PARSER_VERSION)
         self.assertEqual(len(result["events"]), 2)
         first, program = result["events"]
@@ -58,6 +58,17 @@ class AnalogFilmNYCAdapterTests(unittest.TestCase):
             [item["reason"] for item in result["rejections"]],
             ["missing_explicit_time"],
         )
+
+    def test_timed_entry_without_ticket_is_recorded_as_rejected(self):
+        body = '<main><h2>Sunday, August 16th:</h2><p>3:30 PM<br><em>Film</em> (1994) dir. Director –</p></main>'
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "listing.html"
+            path.write_text(body)
+            result = AnalogFilmNYCAdapter(Client(path)).crawl(
+                self.source(), dt.date(2026, 8, 16), 0, "America/New_York")
+        self.assertEqual(result["source"]["state"], "parse_failed")
+        self.assertEqual(result["rejections"][0]["reason"], "missing_ticket_link")
+        self.assertIn("Film", result["rejections"][0]["raw"]["text"])
 
     def test_full_empty_day_coverage_is_verified(self):
         result = AnalogFilmNYCAdapter(

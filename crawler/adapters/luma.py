@@ -7,16 +7,18 @@ import datetime as dt
 from urllib.parse import urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
-from crawler.contracts import ParseError, source_result
+from bs4 import BeautifulSoup
+
+from crawler.contracts import FetchError, RobotsDenied, RateLimited, ParseError, source_result
 from crawler.jsonld import HtmlDocument, find_typed_nodes, load_json_ld
 
 
 ADAPTER_ID = "luma_calendar"
-PARSER_VERSION = "luma-calendar-jsonld-v1"
+PARSER_VERSION = "luma-calendar-jsonld-v2"
 METHOD = "python_adapter"
 
 LUMA_CATEGORY_ADAPTER_ID = "luma_category"
-LUMA_CATEGORY_PARSER_VERSION = "luma-category-discovery-api-v1"
+LUMA_CATEGORY_PARSER_VERSION = "luma-category-discovery-api-v2"
 LUMA_CATEGORY_API = "https://api.lu.ma/discover/get-paginated-events"
 LUMA_CATEGORY_PAGE_SIZE = 50
 NYC_COORDINATE = {"latitude": "40.7128", "longitude": "-74.0060"}
@@ -86,11 +88,11 @@ class LumaCalendarAdapter:
 
             parse_errors = any(item["reason"] == "event_parse_failed"
                                for item in rejections)
-            # A page with only stale or future-outside-window events is not an
-            # explicit empty signal. Keep it auditable so the runner can use a
-            # fallback instead of marking a temporarily stale calendar empty.
+            # Outside-window events prove zero only when the embedded collection
+            # confirms that all upcoming records are present.
             state = ("validation_failed" if parse_errors else
                      "ok" if events else
+                     "empty_verified" if _complete_calendar(response.text, nodes) else
                      "empty_suspicious")
             detail = (
                 "Python adapter parsed {} Event JSON-LD node(s), {} event(s) in "
@@ -145,6 +147,8 @@ class LumaCategoryAdapter:
         ordering_is_proven = True
         scan_complete = False
         seen_ids = set()
+        detail_errors = []
+        detail_blocked = None
         try:
             slug = _category_slug(source["url"])
             while True:
@@ -190,6 +194,16 @@ class LumaCategoryAdapter:
                     if not seen_date <= event_date <= window_end:
                         rejections.append({"reason": "outside_date_window", "raw": event})
                         continue
+                    # Keep list facts when detail access fails, but expose the gap.
+                    try:
+                        if detail_blocked:
+                            raise RateLimited(detail_blocked)
+                        self._enrich_event(event, timezone)
+                    except (FetchError, RobotsDenied, RateLimited, ParseError, ValueError, TypeError) as error:
+                        if isinstance(error, (RateLimited, RobotsDenied)):
+                            detail_blocked = "detail requests stopped: {}".format(error) if not detail_blocked else detail_blocked
+                        detail_errors.append("{}: {}".format(event["url"], error))
+                        event["extracted_json"] = {"discovery": entry, "detail_error": str(error)}
                     events.append(event)
 
                 if not has_more:
@@ -210,9 +224,11 @@ class LumaCategoryAdapter:
 
             parse_failed = any(item["reason"] == "event_parse_failed"
                                for item in rejections)
-            if parse_failed:
+            if parse_failed or detail_errors:
                 state = "validation_failed"
-                error = "one or more discovery events could not be parsed"
+                error = "{} parse failure(s); {} detail failure(s). {}".format(
+                    sum(item["reason"] == "event_parse_failed" for item in rejections),
+                    len(detail_errors), "; ".join(detail_errors[:3]))
             elif events:
                 state = "ok"
                 error = None
@@ -252,6 +268,38 @@ class LumaCategoryAdapter:
                 detail="Luma category discovery API contract was not met.",
                 error=str(error),
             )
+
+
+    def _enrich_event(self, event, timezone):
+        """Read public detail facts only after URL, title, and date agree."""
+        response = self.client.get(event["url"])
+        if self.artifacts is not None:
+            self.artifacts.save_response("event_html", "luma-{}.html".format(
+                response.content_hash), response)
+        nodes = [node for value in load_json_ld(HtmlDocument(response.text))
+                 for node in find_typed_nodes(value, "Event")]
+        def identity(url):
+            parsed = urlsplit(str(url))
+            return (parsed.hostname in {"luma.com", "lu.ma"}, parsed.path.rstrip("/"))
+        matches = [node for node in nodes
+                   if identity(node.get("url") or node.get("@id")) == identity(event["url"])
+                   and str(node.get("name") or "").strip() == event["title"]
+                   and _local_datetime(node.get("startDate"), timezone) == event["start"]]
+        if len(matches) != 1:
+            raise ParseError("detail page does not contain one matching Event")
+        node = matches[0]
+        description = BeautifulSoup(str(node.get("description") or ""), "html.parser").get_text(" ", strip=True)
+        if not description:
+            raise ParseError("matching detail Event has no description")
+        event["description"] = description
+        place = node.get("location") if isinstance(node.get("location"), dict) else {}
+        for field, value in (("venue", str(place.get("name") or "").strip()),
+                             ("address", _format_address(place.get("address")))):
+            if not event[field] and value:
+                event[field] = value
+        event["extracted_json"] = {"discovery": event["extracted_json"], "detail": node,
+            "detail_url": response.url, "detail_fetched_at": response.fetched_at,
+            "detail_content_hash": response.content_hash}
 
 
 def _category_slug(source_url):
@@ -454,6 +502,26 @@ def _parse_event(node, source, response, timezone):
         "content_hash": response.content_hash,
         "extracted_json": node,
     }
+
+
+def _complete_calendar(text, nodes):
+    """Verify that the embedded upcoming collection matches all parsed events."""
+    script = BeautifulSoup(text, "html.parser").select_one("script#__NEXT_DATA__")
+    if script is None:
+        return False
+    try:
+        upcoming = json.loads(script.get_text())["props"]["pageProps"]["initialData"]["data"]["upcoming"]
+        if upcoming.get("has_more") is not False or not isinstance(upcoming.get("entries"), list):
+            return False
+        def identity(url, start):
+            return (str(url).rstrip("/").rsplit("/", 1)[-1],
+                    dt.datetime.fromisoformat(start.replace("Z", "+00:00")))
+        embedded = [identity(item["event"]["url"], item["event"]["start_at"])
+                    for item in upcoming["entries"]]
+        parsed = [identity(node["url"], node["startDate"]) for node in nodes]
+        return len(embedded) == len(parsed) and set(embedded) == set(parsed)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
 
 
 def _empty_collection_signal(values):

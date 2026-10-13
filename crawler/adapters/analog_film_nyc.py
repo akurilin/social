@@ -15,13 +15,14 @@ from crawler.contracts import ParseError, source_result
 
 
 ADAPTER_ID = "analog_film_nyc"
-PARSER_VERSION = "analog-film-nyc-html-v1"
+PARSER_VERSION = "analog-film-nyc-html-v4"
 METHOD = "python_adapter"
 _DAY_HEADING = re.compile(
     r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+"
     r"([A-Z][a-z]+)\s+(\d{1,2})(?:st|nd|rd|th):?$"
 )
-_TIME = re.compile(r"^\d{1,2}:\d{2}\s*(?:AM|PM)$", re.I)
+_CLOCK = r"\d{1,2}:\d{2}\s*(?:AM|PM)"
+_TIME = re.compile(r"^" + _CLOCK + r"(?:\s*[–—-]\s*" + _CLOCK + r")*$", re.I)
 _MONTHS = {name.lower(): number for number, name in enumerate(
     ("January", "February", "March", "April", "May", "June", "July",
      "August", "September", "October", "November", "December"), 1)}
@@ -64,7 +65,7 @@ class AnalogFilmNYCAdapter:
                 section, response, source, timezone)
             errors.extend(section_errors)
             for raw in unresolved:
-                reason = "missing_explicit_time"
+                reason = raw.pop("rejection_reason", "missing_explicit_time")
                 if seen_date <= section.date <= end_date:
                     rejections.append({"reason": reason, "raw": raw})
                 else:
@@ -78,6 +79,8 @@ class AnalogFilmNYCAdapter:
         coverage_complete = _has_complete_day_coverage(sections, seen_date, end_date)
         missing_time_in_window = any(
             item["reason"] == "missing_explicit_time" for item in rejections)
+        if missing_time_in_window:
+            errors.append("one or more screenings have no explicit time")
         if errors:
             state = "validation_failed" if events else "parse_failed"
         elif events:
@@ -111,14 +114,20 @@ def _day_sections(text, reference_date):
         match = _DAY_HEADING.fullmatch(heading_text)
         if not match:
             continue
-        paragraph = heading.find_next_sibling("p")
-        if paragraph is None:
+        # Keep every paragraph until the next heading; separators do not end a day.
+        paragraphs = []
+        for sibling in heading.next_siblings:
+            if getattr(sibling, "name", None) == "h2":
+                break
+            if getattr(sibling, "name", None) == "p":
+                paragraphs.append(sibling)
+        if not paragraphs:
             raise ParseError("Analog Film NYC day section is missing its screening paragraph")
-        sections.append(DaySection(
-            date=_heading_date(match, reference_date),
-            heading=heading_text,
-            paragraph=paragraph,
-        ))
+        for paragraph in paragraphs:
+            sections.append(DaySection(
+                date=_heading_date(match, reference_date),
+                heading=heading_text, paragraph=paragraph,
+            ))
     return sections
 
 
@@ -147,6 +156,10 @@ def _section_screenings(section, response, source, timezone):
         if ticket_index >= len(lines) or _TIME.fullmatch(_line_text(lines[ticket_index])):
             errors.append("{} {} has a time but no ticket line".format(
                 section.heading, time_text))
+            # Retain incomplete timed records so the run accounts for every candidate.
+            raw = _unresolved_item(section, lines[index:ticket_index], response.url)
+            raw["rejection_reason"] = "missing_ticket_link"
+            unresolved.append(raw)
             index = ticket_index
             unassigned_start = index
             continue
@@ -162,12 +175,14 @@ def _section_screenings(section, response, source, timezone):
             unassigned_start = index
             continue
         intro_lines, next_index = _following_introductions(lines, ticket_index + 1)
-        events.append(_event(
-            section=section, time_text=time_text, titles=titles, venue=venue,
-            ticket_url=urljoin(response.url, ticket_url),
-            description_lines=lines[index + 1:ticket_index + 1] + intro_lines,
-            response=response, source=source, timezone=timezone,
-        ))
+        # Each explicit showtime is a separate screening with its own ID.
+        for showtime in re.findall(_CLOCK, time_text, re.I):
+            events.append(_event(
+                section=section, time_text=showtime, titles=titles, venue=venue,
+                ticket_url=urljoin(response.url, ticket_url),
+                description_lines=lines[index + 1:ticket_index + 1] + intro_lines,
+                response=response, source=source, timezone=timezone,
+            ))
         index = next_index
         unassigned_start = index
     return events, unresolved, errors
@@ -248,6 +263,12 @@ def _titles(lines):
             value = _clean(node.get_text(" ", strip=True))
             if value and not value.startswith("*"):
                 titles.append(value)
+    if not titles:
+        # Some films omit italics but retain the year and director delimiters.
+        for line in lines:
+            match = re.fullmatch(r"(.+?)\s+[([](?:\d{4}|\?{4})[)\]]\s+dir\..+", _line_text(line))
+            if match:
+                titles.append(match[1].strip())
     return titles
 
 

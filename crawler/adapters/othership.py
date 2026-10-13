@@ -9,14 +9,17 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
+from bs4 import BeautifulSoup
+
 from crawler.contracts import FetchError, ParseError, source_result
 from crawler.jsonld import HtmlDocument, find_typed_nodes, load_json_ld
 
 
 ADAPTER_ID = "othership_events"
-PARSER_VERSION = "othership-webflow-events-v1"
+PARSER_VERSION = "othership-webflow-events-v2"
 METHOD = "python_adapter"
 HOST = "Othership"
+WEBFLOW_COLLECTION_LIMIT = 100
 EVENT_PATH_PREFIX = "/events/"
 VOID_TAGS = {
     "area", "base", "br", "col", "embed", "hr", "img", "input",
@@ -141,7 +144,7 @@ class OthershipEventsAdapter:
             state = "validation_failed"
         elif events:
             state = "ok"
-        elif max(stub.date_hint for stub in stubs) >= window_end:
+        elif _collection_complete(listing.text):
             state = "empty_verified"
         else:
             state = "empty_suspicious"
@@ -161,6 +164,19 @@ class OthershipEventsAdapter:
             ).format(len(stubs), len(events), seen_date, window_end),
             error="; ".join(failures[:5]) or None,
         )
+
+
+def _collection_complete(text):
+    """Accept the static collection only when no next-page or lazy-load control exists."""
+    soup = BeautifulSoup(text, "html.parser")
+    wrappers = soup.select(".events-list-wrapper")
+    if len(wrappers) != 1 or not wrappers[0].select_one(".events-list"):
+        return False
+    if len(wrappers[0].select(".events-item")) >= WEBFLOW_COLLECTION_LIMIT:
+        return False
+    return not soup.select(
+        "a.w-pagination-next[href], a[rel=next][href], [fs-cmsload-element], "
+        "[fs-list-load], [data-next-page]")
 
 
 class _ListingParser(HTMLParser):

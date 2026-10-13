@@ -13,7 +13,7 @@ from crawler.contracts import ParseError, source_result
 
 
 ADAPTER_ID = "casa_italiana"
-PARSER_VERSION = "casa-italiana-tribe-api-v1"
+PARSER_VERSION = "casa-italiana-tribe-api-v2"
 METHOD = "python_adapter"
 PER_PAGE = 100
 API_PATH = "/wp-json/tribe/events/v1/events"
@@ -157,7 +157,7 @@ def _validate_page(payload, page):
 
 def _event(raw, source, response, timezone):
     event_id = raw.get("id") or raw.get("global_id")
-    title = str(raw.get("title") or "").strip()
+    title = _clean(raw.get("title") or "")
     if not event_id or not title or not raw.get("start_date"):
         raise ParseError("event is missing id, title, or start_date")
     start = _local_datetime(raw["start_date"], timezone)
@@ -166,7 +166,8 @@ def _event(raw, source, response, timezone):
     if not event_url:
         raise ParseError("event is missing url")
     venue = raw.get("venue")
-    if venue is None:
+    # WordPress uses [] when no venue is assigned; do not invent a location.
+    if venue is None or venue == []:
         venue = {}
     elif not isinstance(venue, dict):
         raise ParseError("event venue field is invalid")

@@ -1,5 +1,6 @@
 import datetime as dt
 import tempfile
+import json
 import unittest
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -25,6 +26,17 @@ class FakeClient:
 
     def get(self, url):
         self.requests.append(url)
+        if urlsplit(url).hostname in {"luma.com", "lu.ma"}:
+            for fixture in self.pages.values():
+                payload = json.loads(fixture.read_text() if isinstance(fixture, Path) else fixture)
+                for entry in payload['entries']:
+                    event = entry['event']
+                    if url.endswith('/' + event['url']):
+                        node = {'@type':'Event', 'url':url, 'name':event['name'],
+                                'startDate':event['start_at'], 'description':'A public art event.'}
+                        return HttpResponse(url, 200, ('<script type="application/ld+json">' +
+                            json.dumps(node) + '</script>').encode(), {}, '2026-08-15T12:00:00-04:00')
+            raise AssertionError('Unexpected detail URL: ' + url)
         cursor = parse_qs(urlsplit(url).query).get("pagination_cursor", [None])[0]
         fixture = self.pages[cursor]
         body = fixture.read_bytes() if isinstance(fixture, Path) else fixture.encode("utf-8")
@@ -63,13 +75,13 @@ class LumaCategoryAdapterTests(unittest.TestCase):
         self.assertEqual(first["capacity_flag"], "limited")
         self.assertEqual(first["address"],
                          "Studio 17, 123 Atlantic Ave, Brooklyn, NY 11201, USA")
-        self.assertEqual(len(result["source"]["artifacts"]), 2)
-        self.assertEqual(len(client.requests), 2)
+        self.assertEqual(len(result["source"]["artifacts"]), 4)
+        self.assertEqual(len(client.requests), 4)
         self.assertTrue(client.requests[0].startswith(LUMA_CATEGORY_API + "?"))
         first_query = parse_qs(urlsplit(client.requests[0]).query)
         self.assertEqual(first_query["slug"], ["arts"])
         self.assertEqual(first_query["pagination_limit"], ["50"])
-        second_query = parse_qs(urlsplit(client.requests[1]).query)
+        second_query = parse_qs(urlsplit(client.requests[2]).query)
         self.assertEqual(second_query["pagination_cursor"], ["cursor-two"])
 
     def test_explicit_empty_page_is_verified(self):

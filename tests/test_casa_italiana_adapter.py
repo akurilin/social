@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,6 +58,22 @@ class CasaItalianaAdapterTests(unittest.TestCase):
         self.assertEqual(query["start_date"], ["2026-08-15"])
         self.assertEqual(query["end_date"], ["2026-08-25"])
         self.assertEqual(query["per_page"], ["100"])
+
+    def test_empty_venue_array_is_missing_data_not_a_parse_failure(self):
+        payload = json.loads((FIXTURES / "casa_italiana_api_page_1.json").read_text())
+        payload["total"] = len(payload["events"])
+        payload["total_pages"] = 1
+        payload["events"][0]["venue"] = []
+        payload["events"][0]["title"] = "Music &#8211; Discussion"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "response.json"
+            path.write_text(json.dumps(payload))
+            result = CasaItalianaAdapter(Client({1: path})).crawl(
+                self.source(), dt.date(2026, 8, 15), 10, "America/New_York")
+        self.assertEqual(result["source"]["state"], "ok")
+        self.assertEqual(result["events"][0]["venue"], "")
+        self.assertEqual(result["events"][0]["address"], "")
+        self.assertEqual(result["events"][0]["title"], "Music – Discussion")
 
     def test_explicit_total_zero_is_verified_empty(self):
         result = CasaItalianaAdapter(Client({
