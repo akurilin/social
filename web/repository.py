@@ -88,6 +88,8 @@ class Repository:
         )
         self.cache_path = (self.root / ".cache").resolve()
         self.calendar_refresh_lock = threading.Lock()
+        self.calendar_refresh_cancel = threading.Event()
+        self.calendar_refresh_state_lock = threading.Lock()
 
     def load_calendar_coverage(self):
         with closing(self.connect()) as con:

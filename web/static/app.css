@@ -114,6 +114,9 @@ h2 { margin: 0; font-size: 20px; line-height: 1.2; letter-spacing: -.025em; }
 .button.tiny { min-height: 29px; padding: 5px 9px; font-size: 11px; }
 
 .filter-bar { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 254, 250, .7); }
+/* Keep Reset inside the filter row on narrow screens. */
+.event-filters { flex-wrap: wrap; }
+[data-reset-filters] { flex-shrink: 0; white-space: nowrap; }
 .filter-bar label { min-width: 130px; }
 .filter-bar .search-field { flex: 1; min-width: 220px; }
 .filter-bar .filter-checkbox { display: flex; min-width: 145px; height: 40px; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: white; cursor: pointer; }
@@ -287,8 +290,8 @@ code { font-size: .92em; }
 .month-nav { display: flex; align-items: center; gap: 5px; }
 .icon-button { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; color: var(--ink); font-size: 24px; line-height: 1; text-decoration: none; }
 .icon-button:hover { background: var(--surface-2); }
-.calendar-filter-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 11px; }
-.calendar-filters { display: flex; align-items: flex-end; gap: 9px; }
+.calendar-filter-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 11px; }
+.calendar-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 9px; }
 .calendar-filters label { min-width: 120px; }
 .calendar-filters .source-filter { min-width: 280px; }
 .calendar-filters label > span { display: block; margin-bottom: 6px; color: var(--muted); font: 700 9px/1.2 var(--mono); letter-spacing: .07em; text-transform: uppercase; }

@@ -1,4 +1,68 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const FILTER_STORAGE_PREFIX = "social-crawler:filters:v1:";
+  const FILTER_PAGES = new Set(["/events", "/calendar"]);
+  const PERIOD_FIELD = "period";
+  const SOURCE_ID_FIELD = "source_id";
+  const SOURCE_MARKER_FIELD = "sources_filtered";
+  const filterForm = document.querySelector("form[data-persist-filters]");
+  const storageKey = (page) => `${FILTER_STORAGE_PREFIX}${page}`;
+  const readFilters = (page) => {
+    try {
+      return window.localStorage.getItem(storageKey(page));
+    } catch {
+      return null;
+    }
+  };
+  const saveFilters = () => {
+    if (!filterForm) return;
+    const params = new URLSearchParams(new FormData(filterForm));
+    // Match the server's last period value and keep future sources in All sources.
+    const periods = params.getAll(PERIOD_FIELD);
+    if (periods.length) params.set(PERIOD_FIELD, periods.at(-1));
+    const sources = Array.from(filterForm.querySelectorAll(`input[name="${SOURCE_ID_FIELD}"]`));
+    if (sources.length && sources.every((box) => box.checked)) {
+      params.delete(SOURCE_MARKER_FIELD);
+      params.delete(SOURCE_ID_FIELD);
+    }
+    try {
+      window.localStorage.setItem(
+        storageKey(filterForm.dataset.persistFilters), params.toString());
+    } catch {
+      // Filters still work when the browser blocks storage.
+    }
+  };
+
+  if (filterForm) {
+    // Restore only bare page visits. Explicit URLs remain usable as shared links.
+    const saved = readFilters(filterForm.dataset.persistFilters);
+    if (!window.location.search && saved) {
+      const target = new URL(window.location.href);
+      target.search = saved;
+      window.location.replace(target.href);
+      return;
+    }
+    saveFilters();
+    filterForm.addEventListener("submit", saveFilters);
+    filterForm.querySelector("[data-reset-filters]")?.addEventListener("click", () => {
+      try {
+        window.localStorage.removeItem(storageKey(filterForm.dataset.persistFilters));
+      } catch {
+        // The reset link also works without storage or JavaScript.
+      }
+    });
+  }
+
+  // View switches use the destination's saved filters, including its month or search.
+  document.querySelectorAll(".sidebar a[href], .view-switch a[href]").forEach((link) => {
+    const target = new URL(link.href);
+    if (target.origin !== window.location.origin || !FILTER_PAGES.has(target.pathname)) return;
+    const saved = readFilters(target.pathname.slice(1));
+    if (saved !== null) {
+      target.search = saved;
+      link.href = target.href;
+    }
+  });
+
   // Hide only this day's entries; keep the date bar available to reopen them.
   document.querySelectorAll("[data-day-toggle]").forEach((button) => {
     const divider = button.closest(".event-day-divider");
@@ -34,9 +98,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const initialTime = updated.querySelector("time");
     if (initialTime) initialTime.textContent = formatCheckTime(initialTime.dateTime);
 
+    let refreshing = false;
     refreshButton.addEventListener("click", async () => {
-      refreshButton.disabled = true;
-      refreshButton.textContent = "Checking…";
+      if (refreshing) {
+        refreshButton.disabled = true;
+        refreshButton.textContent = "Stopping…";
+        try {
+          const response = await fetch("/calendar-coverage/stop", {
+            method: "POST", headers: { Accept: "application/json" },
+          });
+          if (!response.ok) throw new Error("Could not stop the refresh. Try again.");
+        } catch (error) {
+          message.textContent = error.message;
+        } finally {
+          refreshButton.disabled = false;
+          refreshButton.textContent = refreshing ? "Stop refresh" : "Refresh calendar";
+        }
+        return;
+      }
+      refreshing = true;
+      refreshButton.textContent = "Stop refresh";
       coveragePanel.setAttribute("aria-busy", "true");
       message.textContent = "Reading your calendar and checking social plans…";
       try {
@@ -48,6 +129,10 @@ document.addEventListener("DOMContentLoaded", () => {
           throw new Error(error.detail || "Calendar check failed. Try again.");
         }
         const result = await response.json();
+        if (result.stopped) {
+          message.textContent = "Calendar refresh stopped. Displayed colors are from the last check.";
+          return;
+        }
         // Rebuild the dates if midnight passed while this page was open.
         const tiles = coveragePanel.querySelectorAll(".coverage-tile");
         if (tiles[0].dataset.coverageDate !== result.days[0].date) {
@@ -71,6 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (error) {
         message.textContent = `${error.message} Displayed colors are from the last check.`;
       } finally {
+        refreshing = false;
         refreshButton.disabled = false;
         refreshButton.textContent = "Refresh calendar";
         coveragePanel.removeAttribute("aria-busy");

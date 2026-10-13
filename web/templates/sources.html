@@ -22,19 +22,22 @@
 <form class="filter-bar" method="get" data-auto-submit>
   {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ direction }}">{% endif %}
   <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ query }}" placeholder="Name, URL, profile…" data-submit-on-input></label>
-  <label><span>Show</span><select name="state">
-    <option value="all" {% if state == 'all' %}selected{% endif %}>All sources</option>
-    <option value="enabled" {% if state == 'enabled' %}selected{% endif %}>Enabled</option>
-    <option value="disabled" {% if state == 'disabled' %}selected{% endif %}>Disabled</option>
-    <option value="issues" {% if state == 'issues' %}selected{% endif %}>With problems</option>
-  </select></label>
+  {# Omit state when unchecked so the route hides disabled sources by default. #}
+  <label class="filter-checkbox"><input type="checkbox" name="state" value="all"{% if state == 'all' %} checked{% endif %}><span>Show disabled sources</span></label>
 </form>
 
 <section class="panel table-panel">
   <div class="table-summary"><strong>{{ sources|length }}</strong> sources shown <span>{{ profiles|length }} retrieval profiles · {{ inbox_count }} inbox sources in this same source catalog</span></div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Source</th><th>Retrieval</th><th>Latest health</th><th>Found</th><th{% if sort == 'added_on' %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links.added_on }}">Added{% if sort == 'added_on' %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th><th>Last checked</th><th></th></tr></thead>
+    <thead><tr>
+      {% for field, label in sort_columns.items() %}
+      <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}>
+        <a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a>
+      </th>
+      {% endfor %}
+      <th></th>
+    </tr></thead>
     <tbody>
     {% for source in sources %}
       <tr class="{% if not source.get('enabled', True) %}is-disabled{% endif %}">

@@ -2,6 +2,9 @@ import datetime as dt
 import json
 import subprocess
 import tempfile
+import threading
+import sys
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -52,6 +55,38 @@ class CalendarCoverageTests(unittest.TestCase):
                 "timezone": "America/New_York", "events": events}), patch(
                 "web.calendar_coverage.classify_events", return_value=decisions):
             return refresh_coverage(self.repo, TODAY)
+
+    def log_rows(self):
+        path = self.repo.cache_path / "logs" / "calendar-coverage.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_refresh_logs_stages_without_calendar_contents(self):
+        self.refresh([calendar_event()], [decision()])
+        rows = self.log_rows()
+        self.assertEqual(rows[0]["event"], "refresh.started")
+        self.assertEqual(rows[-1]["event"], "refresh.completed")
+        self.assertEqual(len({row["run_id"] for row in rows}), 1)
+        model = next(row for row in rows if row["event"] == "classification.started")
+        self.assertEqual(model["model"], MODEL)
+        self.assertEqual(model["event_count"], 1)
+        self.assertNotIn("Book club", json.dumps(rows))
+
+    def test_timeout_logs_cause_and_keeps_history(self):
+        self.refresh([], [])
+        with patch("web.calendar_coverage.read_apple_calendar", return_value={
+                "timezone": "America/New_York", "events": [calendar_event()]}), patch(
+                "web.calendar_coverage.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("private command", 180,
+                    stderr=b"private calendar data: reconnecting stream")):
+            refresh_coverage(self.repo, TODAY)
+        rows = self.log_rows()
+        self.assertEqual(len({row["run_id"] for row in rows}), 2)
+        failed = next(row for row in rows if row["event"] == "command.failed")
+        self.assertEqual(failed["error_type"], "TimeoutExpired")
+        self.assertEqual(failed["timeout_seconds"], 180)
+        self.assertIn("connection", failed["signals"])
+        self.assertEqual(rows[-1]["event"], "refresh.failed")
+        self.assertNotIn("private", json.dumps(rows))
 
     def test_window_crosses_year_and_includes_empty_days(self):
         result = self.refresh([calendar_event()], [decision()])
@@ -294,6 +329,18 @@ class CalendarCoveragePageTests(unittest.TestCase):
                 self.assertIn("coverage-unknown", page.text)
         read.assert_not_called()
 
+    def test_logs_are_accessible_from_calendar(self):
+        response = self.client.get("/calendar-coverage/logs")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("No calendar checks logged", response.text)
+        with patch("web.calendar_coverage.read_apple_calendar", return_value={
+                "timezone": "America/New_York", "events": []}):
+            self.client.post("/calendar-coverage/refresh")
+        response = self.client.get("/calendar-coverage/logs")
+        self.assertIn("refresh.completed", response.text)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn('/calendar-coverage/logs', self.client.get("/calendar").text)
+
     def test_refresh_persists_status_for_both_pages(self):
         with patch("web.calendar_coverage.read_apple_calendar", return_value={
                 "timezone": "America/New_York", "events": []}):
@@ -314,6 +361,46 @@ class CalendarCoveragePageTests(unittest.TestCase):
             response = self.client.post("/calendar-coverage/refresh")
         self.assertEqual(response.status_code, 409)
         read.assert_not_called()
+
+    def test_stop_refresh_keeps_saved_result_and_allows_retry(self):
+        started = threading.Event()
+        previous = self.repo.calendar_coverage()
+
+        processes = []
+        popen = subprocess.Popen
+
+        def start_process(*args, **kwargs):
+            process = popen(*args, **kwargs)
+            processes.append(process)
+            started.set()
+            return process
+
+        def slow_read(*args):
+            from web.calendar_coverage import run_command
+            run_command([sys.executable, "-c", "import time; time.sleep(30)"],
+                        capture_output=True, text=True, check=True, timeout=40)
+
+        with patch("web.calendar_coverage.read_apple_calendar", side_effect=slow_read), patch(
+                "web.calendar_coverage.subprocess.Popen", side_effect=start_process):
+            with ThreadPoolExecutor() as pool:
+                refresh = pool.submit(self.client.post, "/calendar-coverage/refresh")
+                self.assertTrue(started.wait(5))
+                stopped = self.client.post("/calendar-coverage/stop")
+                self.assertEqual(stopped.status_code, 200)
+                result = refresh.result(timeout=5)
+        self.assertTrue(result.json()["stopped"])
+        self.assertIsNotNone(processes[0].poll())
+        self.assertEqual(self.repo.calendar_coverage(), previous)
+        from web.calendar_logs import read_logs
+        self.assertIn("refresh.stopped", read_logs(self.repo.cache_path))
+        with patch("web.calendar_coverage.read_apple_calendar", return_value={
+                "timezone": "America/New_York", "events": []}):
+            self.assertEqual(self.client.post("/calendar-coverage/refresh").status_code, 200)
+
+    def test_stop_rejects_cross_site_requests(self):
+        response = self.client.post("/calendar-coverage/stop", headers={
+            "Origin": "https://example.com", "Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(response.status_code, 403)
 
     def test_refresh_rejects_cross_site_requests(self):
         with patch("web.calendar_coverage.read_apple_calendar") as read:

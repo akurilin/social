@@ -18,6 +18,7 @@
     <div class="coverage-legend" aria-label="Day colors">
       <span class="coverage-planned">Social plan</span><span class="coverage-open">No social plan found</span><span class="coverage-unknown">Unchecked / unavailable</span>
     </div>
+    <a href="/calendar-coverage/logs" target="_blank" rel="noopener">View logs</a>
     <span class="coverage-updated" data-coverage-updated>{% if coverage.checked_at %}Last check: <time datetime="{{ coverage.checked_at }}">{{ coverage.checked_at[:16]|replace('T', ' ') }}</time>{% endif %}</span>
   </div>
   <noscript><p>Enable JavaScript to refresh your calendar.</p></noscript>

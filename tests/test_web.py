@@ -281,12 +281,10 @@ class WebControlCenterTests(unittest.TestCase):
             descending.text.index("Zine workshop"),
             descending.text.index("A social dinner"),
         )
-        self.assertIn("First added", ascending.text)
-        self.assertIn('sort=first_seen&amp;dir=desc', ascending.text)
-        self.assertIn('aria-sort="ascending"', ascending.text)
-        self.assertIn('aria-sort="descending"', descending.text)
+        self.assertNotIn("First added", ascending.text)
+        self.assertNotIn('sort=first_seen&amp;dir=desc', ascending.text)
 
-    def test_event_list_shows_and_sorts_by_last_seen(self):
+    def test_event_list_sorts_by_last_seen_in_both_directions(self):
         ascending = self.client.get("/events?sort=last_seen&dir=asc")
         descending = self.client.get("/events?sort=last_seen&dir=desc")
 
@@ -300,10 +298,8 @@ class WebControlCenterTests(unittest.TestCase):
             descending.text.index("Zine workshop"),
             descending.text.index("A social dinner"),
         )
-        self.assertIn("Last seen", ascending.text)
-        self.assertIn('sort=last_seen&amp;dir=desc', ascending.text)
-        self.assertIn('aria-sort="ascending"', ascending.text)
-        self.assertIn('aria-sort="descending"', descending.text)
+        self.assertNotIn("Last seen", ascending.text)
+        self.assertNotIn('sort=last_seen&amp;dir=desc', ascending.text)
 
     def test_event_list_hides_past_events_by_default(self):
         yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
@@ -430,6 +426,34 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertIn('name="q" value="Source ONE"', response.text)
         self.assertIn("Source One", response.text)
 
+    def test_source_list_sorts_each_data_column(self):
+        # Use distinct values to check text, number, date, and missing-value order.
+        rows = [
+            dict(id="high", title="Zulu", retrieval_profile="z-profile",
+                 added_on="2026-08-10", health=dict(state="success", found_count=10,
+                 new_count=0, seen_date="2026-08-10")),
+            dict(id="low", title="alpha", retrieval_profile="a-profile",
+                 added_on="2026-08-01", health=dict(state="error", found_count=2,
+                 new_count=0, seen_date="2026-08-01")),
+            dict(id="missing", title="Missing", retrieval_profile="m-profile",
+                 added_on=None, health=None),
+        ]
+        for field in ("title", "retrieval_profile", "health", "found_count",
+                      "added_on", "seen_date"):
+            for direction in ("asc", "desc"):
+                with self.subTest(field=field, direction=direction), patch.object(
+                        app.state.repo, "list_sources", return_value=rows):
+                    response = self.client.get("/sources", params={
+                        "sort": field, "dir": direction, "q": "", "state": "all"})
+                    first, second = ("low", "high") if direction == "asc" else ("high", "low")
+                    self.assertLess(response.text.index(f'source_id={first}"'),
+                                    response.text.index(f'source_id={second}"'))
+                    self.assertIn(f'sort={field}&amp;dir={"desc" if direction == "asc" else "asc"}', response.text)
+                    self.assertIn('state=all', response.text)
+                    if field in ("found_count", "added_on", "seen_date"):
+                        self.assertLess(response.text.index(f'source_id={second}"'),
+                                        response.text.index('source_id=missing"'))
+
     def test_source_list_shows_and_sorts_date_added(self):
         catalog = app.state.repo.load_catalog()
         catalog["sources"][0]["added_on"] = "2026-08-01"
@@ -487,9 +511,11 @@ class WebControlCenterTests(unittest.TestCase):
 
         self.assertIn("Source One", default_view.text)
         self.assertNotIn("Disabled Source", default_view.text)
-        self.assertIn('<option value="enabled" selected>', default_view.text)
+        self.assertIn('type="checkbox" name="state" value="all"', default_view.text)
+        self.assertNotIn('value="all" checked', default_view.text)
         self.assertIn("Disabled Source", all_view.text)
-        self.assertIn('<option value="all" selected>', all_view.text)
+        self.assertIn('value="all" checked', all_view.text)
+        self.assertIn('Show disabled sources', all_view.text)
 
     def test_filter_queries_change_their_page_content(self):
         event_search = self.client.get("/events", params={"q": "Zine"})

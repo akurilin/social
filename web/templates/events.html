@@ -9,7 +9,7 @@
   </div>
 </header>
 {% include "calendar_coverage.html" %}
-<form class="filter-bar event-filters" method="get" data-auto-submit>
+<form class="filter-bar event-filters" method="get" data-auto-submit data-persist-filters="events">
   <label class="search-field"><span>Search</span><input type="search" name="q" value="{{ query }}" placeholder="Title, host, venue…" data-submit-on-input></label>
   <input type="hidden" name="period" value="all">
   <input type="hidden" name="sort" value="{{ sort }}">
@@ -17,6 +17,7 @@
   <label class="filter-checkbox"><input type="checkbox" name="period" value="upcoming" {% if period == 'upcoming' %}checked{% endif %}><span><strong>Today and later</strong><small>Hide older events</small></span></label>
   {{ fit_filter(rank) }}
   {{ source_filter(source_options, selected_source_ids) }}
+  <a class="button secondary" href="/events" data-reset-filters>Reset filters</a>
 </form>
 <section class="panel table-panel">
   <div class="table-summary"><strong>{{ events|length }}</strong> unique events shown{% if period == 'upcoming' %}<span>Past events are hidden</span>{% endif %}{% if events|length == 500 %}<span>Result limit reached. Add a filter to narrow the list.</span>{% endif %}</div>
@@ -26,17 +27,17 @@
       <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th>
       {% endfor %}
       <th class="event-link-column">Link</th>
-      {% for field, label in [('start','Start'),('first_seen','First added'),('last_seen','Last seen'),('place','Place'),('source','Source'),('rank','Fit')] %}
+      {% for field, label in [('start','Start'),('place','Place'),('source','Source'),('rank','Fit')] %}
       <th{% if sort == field %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}><a class="sort-link" href="{{ sort_links[field] }}">{{ label }}{% if sort == field %}<span aria-hidden="true">{{ '↑' if direction == 'asc' else '↓' }}</span><span class="sr-only">, sorted {{ direction }}ending</span>{% else %}<span class="sort-idle" aria-hidden="true">↕</span>{% endif %}</a></th>
       {% endfor %}
     </tr></thead>
-    <tbody>{% set day_group = namespace(previous='') %}{% for event in events %}{% if sort == 'start' and event.start_day != day_group.previous %}{% set day_coverage = coverage_by_date.get(event.start_day) %}<tr class="event-day-divider{% if day_coverage %} coverage-{{ day_coverage.state }}{% endif %}" data-coverage-date="{{ event.start_day }}"><th colspan="8" scope="rowgroup"><time datetime="{{ event.start_day }}">{{ event.start_day_label }}</time><button type="button" class="event-day-toggle" data-day-toggle aria-expanded="true" aria-label="Collapse {{ event.start_day_label }}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg></button></th></tr>{% endif %}<tr class="event-row{% if loop.index is even %} event-row-alt{% endif %}">
+    <tbody>{% set day_group = namespace(previous='') %}{% for event in events %}{% if sort == 'start' and event.start_day != day_group.previous %}{% set day_coverage = coverage_by_date.get(event.start_day) %}<tr class="event-day-divider{% if day_coverage %} coverage-{{ day_coverage.state }}{% endif %}" data-coverage-date="{{ event.start_day }}"><th colspan="6" scope="rowgroup"><time datetime="{{ event.start_day }}">{{ event.start_day_label }}</time><button type="button" class="event-day-toggle" data-day-toggle aria-expanded="true" aria-label="Collapse {{ event.start_day_label }}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg></button></th></tr>{% endif %}<tr class="event-row{% if loop.index is even %} event-row-alt{% endif %}">
       <td class="wide-cell"><a class="row-link" href="/events/{{ event.id }}"><span class="event-theme" aria-hidden="true">{{ event.theme_emoji }}</span>{{ event.title }}</a><small>{{ event.host or 'Host unknown' }}</small></td>
       <td class="event-link-cell">{% if event.url %}<a class="event-list-link" href="{{ event.url }}" target="_blank" rel="noopener" aria-label="View original event for {{ event.title }}" title="View original event"><span aria-hidden="true">↗</span></a>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="event-date-cell"><time datetime="{{ event.start }}">{% if sort == 'start' %}{{ event.start_time_label }}{% else %}{{ event.start[:16]|replace('T', ' ') }}{% endif %}</time></td><td class="event-date-cell">{{ event.first_seen or '—' }}</td><td class="event-date-cell">{{ event.last_seen or '—' }}</td><td>{{ event.neighborhood or event.venue or '—' }}</td>
+      <td class="event-date-cell"><time datetime="{{ event.start }}">{% if sort == 'start' %}{{ event.start_time_label }}{% else %}{{ event.start[:16]|replace('T', ' ') }}{% endif %}</time></td><td>{{ event.neighborhood or event.venue or '—' }}</td>
       <td><a href="/source?source_id={{ event.source_id|urlencode }}">{{ event.source_id or '—' }}</a></td>
       <td>{{ badge(event.rank or 'unranked') }}</td>
-    </tr>{% set day_group.previous = event.start_day %}{% else %}<tr><td colspan="8"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
+    </tr>{% set day_group.previous = event.start_day %}{% else %}<tr><td colspan="6"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endblock %}

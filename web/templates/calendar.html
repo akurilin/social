@@ -19,10 +19,11 @@
 {% include "calendar_coverage.html" %}
 
 <div class="calendar-filter-row">
-  <form class="calendar-filters" method="get" data-auto-submit>
+  <form class="calendar-filters" method="get" data-auto-submit data-persist-filters="calendar">
     <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
     {{ fit_filter(rank) }}
     {{ source_filter(source_options, selected_source_ids) }}
+    <a class="button secondary" href="/calendar" data-reset-filters>Reset filters</a>
   </form>
   <div class="calendar-legend" aria-label="Fit colors">
     <span class="legend-super">Super</span><span class="legend-high">High</span><span class="legend-medium">Medium</span><span class="legend-low">Low</span><span class="legend-ineligible">Ineligible</span><span class="legend-unranked">Unranked</span>

@@ -8,7 +8,13 @@ The server listens only on `127.0.0.1`. It does not expose the application to th
 
 The local server watches Python modules, Jinja templates, CSS, and JavaScript. It reloads after you save a change, so you do not have to restart it. Refresh the browser to request the changed page or asset.
 
+Events and Calendar each save filter selections in your browser. Calendar also
+saves the month; Events saves search and sort order. Explicit filter URLs take
+priority. Select **Reset filters** to restore that page's defaults.
+
 The Events and Calendar pages show social plans for today and the next 13 days.
+Select **Stop refresh** during a check to stop it and keep the last saved result.
+
 Select **Refresh calendar** to read Apple Calendar and check the events with
 GPT-5.6 Luna, or Claude Sonnet if Codex CLI is not installed.
 Green means a social plan; red means no social plan was found.
@@ -44,6 +50,33 @@ with tools disabled; it does not use `--bare`, which requires API credentials.
 model (or alias) and status message. Refresh replaces this
 result on both pages. New days remain blue until checked. Saved colors refer
 to the displayed check time; calendar edits need another refresh.
+
+### Calendar diagnostics
+
+Select **View logs** beside the calendar check, or open
+`http://127.0.0.1:8000/calendar-coverage/logs`.
+Logs start with the next refresh; earlier errors cannot be recovered.
+
+Each refresh has a run ID. Logs record calendar reads, model selection,
+event and prompt sizes, stage times, process exit codes, timeouts, stops,
+validation failures, and final day counts. A start with no end record means
+work is still active or the server stopped before it could write the result.
+CLI errors are reduced to known connection, limit, sign-in, model-access,
+and argument-error signals. Calendar text, prompts, full CLI output, and
+credentials are not saved. These signals help diagnosis but cannot prove
+why a remote model stalled.
+
+The local file is `.cache/logs/calendar-coverage.jsonl`. It rotates at 1 MB
+and keeps three backups. **View logs** includes all retained files.
+To follow new records from the project folder:
+
+```sh
+tail -f .cache/logs/calendar-coverage.jsonl
+```
+
+Calendar reads and compilation each have a 120-second limit. Model calls
+have a 180-second limit. Failure leaves days unchecked, not empty.
+If the log cannot be written, the server prints a warning and continues.
 
 Apply schema 7 with `python3 social.py migrate` before opening an older store.
 The migration adds the calendar result table and keeps existing crawl data.

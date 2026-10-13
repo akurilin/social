@@ -3,6 +3,10 @@
 import datetime as dt
 import hashlib
 import json
+import os
+import signal
+import time
+from contextvars import ContextVar
 import shutil
 import subprocess
 import sys
@@ -10,7 +14,12 @@ import tempfile
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .calendar_logs import error_details, record, refresh_log, stage
 
+
+PROCESS_POLL_SECONDS = 0.1
+PROCESS_SUCCESS = 0
+REFRESH_CANCEL = ContextVar("calendar_refresh_cancel", default=None)
 COVERAGE_DAYS = 14
 MODEL = "gpt-5.6-luna"
 SONNET_MODEL = "sonnet"
@@ -21,6 +30,7 @@ CALENDAR_TIMEOUT_SECONDS = 120
 COMPILE_TIMEOUT_SECONDS = 120
 MODEL_TIMEOUT_SECONDS = 180
 MAX_PROMPT_CHARACTERS = 500_000
+CLASSIFICATION_DATA_HEADER = "\nCalendar events (JSON data):\n"
 UNKNOWN = "unknown"
 PLANNED = "planned"
 OPEN = "open"
@@ -89,6 +99,64 @@ class CalendarCoverageError(Exception):
     """A safe message that the page can show without calendar contents."""
 
 
+class CalendarRefreshStopped(Exception):
+    """Stop a check without replacing the saved result."""
+
+
+def check_stopped():
+    cancel = REFRESH_CANCEL.get()
+    if cancel is not None and cancel.is_set():
+        raise CalendarRefreshStopped()
+
+
+def run_command(command, *, timeout, check=False, capture_output=False, **kwargs):
+    with stage("command", executable=Path(command[0]).name, timeout_seconds=timeout):
+        return _run_command(command, timeout=timeout, check=check,
+                            capture_output=capture_output, **kwargs)
+
+
+def _run_command(command, *, timeout, check=False, capture_output=False, **kwargs):
+    # Poll child processes so a stop also ends calendar and model work.
+    if REFRESH_CANCEL.get() is None:
+        return subprocess.run(command, timeout=timeout, check=check,
+                              capture_output=capture_output, **kwargs)
+    check_stopped()
+    input_text = kwargs.pop("input", None)
+    if capture_output:
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if input_text is not None:
+        kwargs["stdin"] = subprocess.PIPE
+    with subprocess.Popen(command, start_new_session=True, **kwargs) as process:
+        deadline = time.monotonic() + timeout
+        last_output = last_stderr = None
+        try:
+            while True:
+                check_stopped()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(command, timeout, output=last_output, stderr=last_stderr)
+                try:
+                    stdout, stderr = process.communicate(
+                        input=input_text, timeout=min(PROCESS_POLL_SECONDS, remaining))
+                    break
+                except subprocess.TimeoutExpired as error:
+                    last_output, last_stderr = error.output, error.stderr
+                    input_text = None
+            check_stopped()
+            if check and process.returncode != PROCESS_SUCCESS:
+                raise subprocess.CalledProcessError(process.returncode, command,
+                                                    output=stdout, stderr=stderr)
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        finally:
+            # Kill the process group to include CLI child processes.
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.communicate()
+
+
 def blank_days(today, state=UNKNOWN):
     return [{"date": (today + dt.timedelta(days=offset)).isoformat(),
              "state": state} for offset in range(COVERAGE_DAYS)]
@@ -129,7 +197,7 @@ def build_calendar_reader(cache_path):
     build_dir.mkdir(parents=True, exist_ok=True)
     pending = build_dir / "calendar-reader.build"
     try:
-        subprocess.run(
+        run_command(
             [compiler, "-parse-as-library", str(source), "-o", str(pending),
              "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT",
              "-Xlinker", "__info_plist", "-Xlinker", str(info)],
@@ -148,7 +216,7 @@ def read_apple_calendar(cache_path, today):
     binary = build_calendar_reader(cache_path)
     end = today + dt.timedelta(days=COVERAGE_DAYS)
     try:
-        result = subprocess.run(
+        result = run_command(
             [str(binary), today.isoformat(), end.isoformat()],
             capture_output=True, text=True, check=True, timeout=CALENDAR_TIMEOUT_SECONDS)
         data = json.loads(result.stdout)
@@ -190,7 +258,7 @@ def run_luna(prompt):
         command.extend(["--output-schema", str(schema),
                         "--output-last-message", str(output), "-"])
         try:
-            subprocess.run(command, input=prompt, cwd=folder, capture_output=True,
+            run_command(command, input=prompt, cwd=folder, capture_output=True,
                            text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS)
             return json.loads(output.read_text())
         except subprocess.TimeoutExpired as error:
@@ -211,7 +279,7 @@ def run_sonnet(prompt):
                    "--no-session-persistence", "--output-format", "json",
                    "--json-schema", json.dumps(CLASSIFICATION_SCHEMA)]
         try:
-            result = subprocess.run(
+            result = run_command(
                 command, input=prompt, cwd=Path(temp), capture_output=True,
                 text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS)
             data = json.loads(result.stdout)
@@ -241,7 +309,7 @@ def select_calendar_model():
 
 
 def classify_events(events, model=None):
-    prompt = CLASSIFICATION_PROMPT + "\nCalendar events (JSON data):\n" + json.dumps(events)
+    prompt = CLASSIFICATION_PROMPT + CLASSIFICATION_DATA_HEADER + json.dumps(events)
     if len(prompt) > MAX_PROMPT_CHARACTERS:
         raise CalendarCoverageError("Calendar data is too large for this check.")
     model = model or select_calendar_model()
@@ -285,23 +353,59 @@ def coverage_days(events, decisions, today, timezone):
     return days
 
 
-def refresh_coverage(repository, today=None):
+def refresh_coverage(repository, today=None, cancel=None):
+    with refresh_log(repository.cache_path):
+        return _logged_refresh(repository, today, cancel)
+
+
+def _logged_refresh(repository, today, cancel):
+    token = REFRESH_CANCEL.set(cancel)
+    try:
+        return _refresh_coverage(repository, today)
+    except CalendarRefreshStopped:
+        record("refresh.stopped")
+        result = repository.calendar_coverage(today)
+        return dict(result, stopped=True, message="Calendar refresh stopped.")
+    except Exception as error:
+        record("refresh.failed", **error_details(error))
+        raise
+    finally:
+        REFRESH_CANCEL.reset(token)
+
+
+def _refresh_coverage(repository, today=None):
     today = today or dt.date.today()
     snapshot = {"days": blank_days(today), "timezone": "", "model": None}
+    outcome = "refresh.completed"
     try:
-        calendar = read_apple_calendar(repository.cache_path, today)
+        with stage("calendar_read"):
+            calendar = read_apple_calendar(repository.cache_path, today)
+        check_stopped()
         events = calendar["events"]
         decisions = []
         if events:
             snapshot["model"] = select_calendar_model()
-            decisions = classify_events(events, model=snapshot["model"])
-        snapshot["days"] = coverage_days(events, decisions, today, calendar["timezone"])
+            with stage("classification", model=snapshot["model"], event_count=len(events),
+                       prompt_characters=len(CLASSIFICATION_PROMPT + CLASSIFICATION_DATA_HEADER + json.dumps(events)),
+                       timeout_seconds=MODEL_TIMEOUT_SECONDS):
+                decisions = classify_events(events, model=snapshot["model"])
+        with stage("coverage", event_count=len(events)):
+            snapshot["days"] = coverage_days(events, decisions, today, calendar["timezone"])
         snapshot["timezone"] = calendar["timezone"]
         snapshot["message"] = "Calendar checked. Working in public counts; online and professional gatherings do not."
     except CalendarCoverageError as error:
+        outcome = "refresh.failed"
+        record("check.failed", **error_details(error))
         snapshot["message"] = str(error)
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        outcome = "refresh.failed"
+        record("check.failed", **error_details(error))
         snapshot["message"] = "Calendar check failed. Try again."
     snapshot["checked_at"] = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    repository.save_calendar_coverage(snapshot)
+    check_stopped()
+    with stage("save"):
+        repository.save_calendar_coverage(snapshot)
+    record(outcome, model=snapshot["model"], message=snapshot["message"],
+           day_counts={state: sum(day["state"] == state for day in snapshot["days"])
+                       for state in STATE_LABELS})
     return repository.calendar_coverage(today)

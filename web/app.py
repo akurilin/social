@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from .models import SourceEditorInput
 from .calendar_coverage import refresh_coverage
+from .calendar_logs import read_logs
 from .repository import PROBLEM_STATES, ROOT, Repository
 
 
@@ -30,7 +31,10 @@ DEFAULT_EVENT_SORT_DIRECTION = "asc"
 HOURS_PER_HALF_DAY = 12
 MERIDIEM_LABELS = ("a.m.", "p.m.")
 SORT_DIRECTIONS = {"asc", "desc"}
-SOURCE_SORTS = {"added_on"}
+SOURCE_SORTS = {
+    "title": "Source", "retrieval_profile": "Retrieval", "health": "Latest health",
+    "found_count": "Found", "added_on": "Added", "seen_date": "Last checked",
+}
 CORE_SOURCE_FIELDS = {
     "id", "title", "url", "priority", "geo", "parse_hint",
     "retrieval_profile", "enabled", "disabled_reason", "health", "history",
@@ -255,24 +259,30 @@ def sources(request: Request):
     elif state == "issues":
         items = [item for item in items if item.get("health")
                  and item["health"].get("state") in PROBLEM_STATES]
-    if sort == "added_on":
-        # Keep undated legacy rows after rows with known dates.
-        dated = [item for item in items if item.get("added_on")]
-        undated = [item for item in items if not item.get("added_on")]
-        items = sorted(
-            dated, key=lambda item: item["added_on"],
-            reverse=direction == "desc",
-        ) + undated
+    if sort:
+        # Sort displayed values and keep missing counts or dates last in either direction.
+        def sort_value(item):
+            health = item.get("health") or {}
+            if sort == "health":
+                return (health.get("state") or "never checked") if item.get("enabled", True) else "disabled"
+            value = health.get(sort) if sort in {"found_count", "seen_date"} else item.get(sort)
+            return value.casefold() if isinstance(value, str) else value
+
+        known = [item for item in items if sort_value(item) not in (None, "")]
+        missing = [item for item in items if sort_value(item) in (None, "")]
+        items = sorted(known, key=sort_value, reverse=direction == "desc") + missing
     filters = {"q": query, "state": state}
-    next_added_direction = (
-        "desc" if sort == "added_on" and direction == "asc" else "asc"
-    )
+    sort_links = {
+        field: query_url("/sources", dict(
+            filters, sort=field,
+            dir="desc" if sort == field and direction == "asc" else "asc"))
+        for field in SOURCE_SORTS
+    }
     catalog = repo(request).load_catalog()
     return page(
         request, "sources.html", title="Sources", sources=items, query=query,
         state=state, sort=sort, direction=direction,
-        sort_links={"added_on": query_url(
-            "/sources", dict(filters, sort="added_on", dir=next_added_direction))},
+        sort_links=sort_links, sort_columns=SOURCE_SORTS,
         profiles=catalog.get("retrieval_profiles") or {},
         inbox_count=len((catalog.get("inbox_sources") or {}).get("items") or []),
         catalog_path=repo(request).catalog_path.name,
@@ -422,6 +432,13 @@ def events(request: Request):
     )
 
 
+@app.get("/calendar-coverage/logs", response_class=PlainTextResponse)
+def calendar_coverage_logs(request: Request):
+    # Show retained diagnostics without caching local operational data.
+    return PlainTextResponse(read_logs(repo(request).cache_path),
+                             headers={"Cache-Control": NO_STORE_CACHE_CONTROL})
+
+
 @app.post("/calendar-coverage/refresh")
 def refresh_calendar_coverage(request: Request):
     # Only a local page action may read private calendars and start a model check.
@@ -430,12 +447,29 @@ def refresh_calendar_coverage(request: Request):
             or origin and origin != str(request.base_url).rstrip("/")):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Open this app to refresh.")
     repository = repo(request)
-    if not repository.calendar_refresh_lock.acquire(blocking=False):
-        raise HTTPException(status.HTTP_409_CONFLICT, "A calendar check is already running.")
+    with repository.calendar_refresh_state_lock:
+        if not repository.calendar_refresh_lock.acquire(blocking=False):
+            raise HTTPException(status.HTTP_409_CONFLICT, "A calendar check is already running.")
     try:
-        return refresh_coverage(repository)
+        return refresh_coverage(repository, cancel=repository.calendar_refresh_cancel)
     finally:
-        repository.calendar_refresh_lock.release()
+        with repository.calendar_refresh_state_lock:
+            repository.calendar_refresh_cancel.clear()
+            repository.calendar_refresh_lock.release()
+
+
+@app.post("/calendar-coverage/stop")
+def stop_calendar_coverage(request: Request):
+    # Apply the same origin check before stopping a local refresh.
+    origin = request.headers.get("origin")
+    if (request.headers.get("sec-fetch-site") == "cross-site"
+            or origin and origin != str(request.base_url).rstrip("/")):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Open this app to stop a refresh.")
+    repository = repo(request)
+    with repository.calendar_refresh_state_lock:
+        if repository.calendar_refresh_lock.locked():
+            repository.calendar_refresh_cancel.set()
+    return {"ok": True}
 
 
 @app.get("/calendar", response_class=HTMLResponse)
