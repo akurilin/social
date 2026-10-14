@@ -13,6 +13,12 @@ location.
 
 ![Web control center event list grouped by day](docs/images/events-list.jpg)
 
+To add or remove an event in Apple Calendar through a linked account, set
+`SOCIAL_APPLE_CALENDAR` in your local `.env`. Run `python3 social.py calendars`
+to find the exact `Account/Calendar` name. See [sample.env](sample.env) and
+[web/README.md](web/README.md)
+for the calendar actions.
+
 Install the Python packages and rendered-browser runtime:
 
 ```sh

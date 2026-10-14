@@ -4,7 +4,7 @@
   <key>CFBundleIdentifier</key><string>local.social-crawler.calendar-reader</string>
   <key>CFBundleName</key><string>Social Crawler</string>
   <key>NSCalendarsFullAccessUsageDescription</key>
-  <string>Read the next 14 days to check your social plans. Event details are sent to Luna or Claude Sonnet for this check. No calendar events are changed.</string>
+  <string>Read events to check social plans. Add or remove events when you choose these actions. Calendar details are sent to Luna or Claude Sonnet during a coverage check.</string>
   <key>NSCalendarsUsageDescription</key>
-  <string>Read the next 14 days to check your social plans. Event details are sent to Luna or Claude Sonnet for this check. No calendar events are changed.</string>
+  <string>Read events to check social plans. Add or remove events when you choose these actions. Calendar details are sent to Luna or Claude Sonnet during a coverage check.</string>
 </dict></plist>

@@ -1,6 +1,7 @@
 import json
 import datetime as dt
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from fastapi.testclient import TestClient
 
 import events_store
 from web.app import app
+from web.calendar_write import CalendarWriteError
 from web.__main__ import PROJECT_ROOT, RELOAD_PATTERNS, main
 from web.event_theme import event_theme_emoji
 from web.repository import Repository
@@ -787,7 +789,7 @@ class WebControlCenterTests(unittest.TestCase):
             "# Crawler skill\n\nUpdated\n",
         )
 
-    def test_event_detail_is_read_only(self):
+    def test_event_detail_shows_read_only_record_and_disabled_calendar(self):
         con = events_store.connect(str(self.database))
         with con:
             events_store.upsert_event_alias(
@@ -812,17 +814,138 @@ class WebControlCenterTests(unittest.TestCase):
         self.assertIn("source-one · preferred", response.text)
         self.assertNotIn("Back to events", response.text)
         self.assertNotIn("detail-rail", response.text)
-        self.assertNotIn("<form", response.text)
-        self.assertNotIn("Save event", response.text)
-        self.assertNotIn("<input", response.text)
-        self.assertNotIn("<textarea", response.text)
-        self.assertNotIn("<select", response.text)
-
+        self.assertIn("Set SOCIAL_APPLE_CALENDAR", response.text)
+        self.assertIn('type="submit" disabled aria-disabled="true"', response.text)
         post_response = self.client.post(path, data={"title": "Changed"})
         self.assertEqual(post_response.status_code, 405)
         unchanged = self.client.get(path)
         self.assertIn("A social dinner", unchanged.text)
         self.assertNotIn(">Changed<", unchanged.text)
+
+    def test_event_calendar_save_uses_local_setting_and_end_time(self):
+        (self.root / ".env").write_text(
+            "SOCIAL_APPLE_CALENDAR=Example Account/main\n", encoding="utf-8")
+        path = "/events/{}".format(self.event_id)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SOCIAL_APPLE_CALENDAR", None)
+            ready = {"ready": True, "message": "Calendar ready: Example Account/main."}
+            with patch("web.app.calendar_event_status", return_value=dict(
+                    ready, present_ids=set(), ambiguous_ids=set())), \
+                    patch("web.app.calendar_readiness", return_value=ready):
+                detail = self.client.get(path)
+                self.assertIn("Calendar ready: Example Account/main.", detail.text)
+                self.assertNotIn('type="submit" disabled', detail.text)
+                token = re.search(r'name="csrf_token" value="([^"]+)"', detail.text).group(1)
+                end = self.dinner_day.isoformat() + "T21:00"
+                with patch("web.app.save_event", return_value="saved") as save:
+                    response = self.client.post(
+                        path + "/calendar", data={"csrf_token": token, "end": end},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(response.status_code, 303)
+                    self.assertEqual(response.headers["location"], path + "?calendar=saved")
+                    self.assertEqual(save.call_args.args[1], "Example Account/main")
+                    self.assertEqual(save.call_args.args[3][:16], end)
+                    list_response = self.client.post(
+                        path + "/calendar", data={
+                            "csrf_token": token, "end": end,
+                            "return_to": "/events?period=upcoming",
+                        }, follow_redirects=False,
+                    )
+                    self.assertEqual(list_response.headers["location"],
+                                     "/events?period=upcoming")
+                    json_response = self.client.post(
+                        path + "/calendar", data={"csrf_token": token, "end": end},
+                        headers={"accept": "application/json"},
+                    )
+                    self.assertEqual(json_response.json(), {"state": "saved"})
+                    invalid = self.client.post(
+                        path + "/calendar", data={"csrf_token": token, "end": "2020-01-01T09:00"},
+                    )
+                    self.assertEqual(invalid.status_code, 400)
+                    self.assertEqual(save.call_count, 3)
+                self.assertEqual(self.client.post(path + "/calendar", data={"end": end}).status_code, 403)
+
+    def test_calendar_save_stays_disabled_for_unverified_target(self):
+        (self.root / ".env").write_text(
+            "SOCIAL_APPLE_CALENDAR=Example Account/missing\n", encoding="utf-8")
+        path = "/events/{}".format(self.event_id)
+        unavailable = {"ready": False, "message": "This calendar is missing or cannot be changed."}
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SOCIAL_APPLE_CALENDAR", None)
+            with patch("web.app.calendar_event_status", return_value=dict(
+                    unavailable, present_ids=set(), ambiguous_ids=set())), \
+                    patch("web.app.calendar_readiness", return_value=unavailable):
+                detail = self.client.get(path)
+                self.assertIn(unavailable["message"], detail.text)
+                self.assertIn('type="submit" disabled aria-disabled="true"', detail.text)
+                token = re.search(r'name="csrf_token" value="([^"]+)"', detail.text).group(1)
+                with patch("web.app.save_event") as save:
+                    response = self.client.post(
+                        path + "/calendar", data={
+                            "csrf_token": token,
+                            "end": self.dinner_day.isoformat() + "T21:00",
+                        },
+                    )
+                    self.assertEqual(response.status_code, 409)
+                    save.assert_not_called()
+
+    def test_event_list_marks_events_already_on_calendar(self):
+        state = {"ready": True, "message": "Ready to save.",
+                 "present_ids": {self.event_id}, "ambiguous_ids": set()}
+        with patch("web.app.calendar_event_status", return_value=state):
+            response = self.client.get("/events?period=upcoming")
+        cell = re.search(
+            r'<td class="event-calendar-cell" id="calendar-cell-{}">(.*?)</td>'
+            .format(self.event_id), response.text, re.S)
+        self.assertIsNotNone(cell)
+        self.assertIn("✓ Added", cell.group(1))
+        self.assertIn("/calendar/remove", cell.group(1))
+        self.assertIn(">Remove</button>", cell.group(1))
+        state["ambiguous_ids"] = {self.event_id}
+        with patch("web.app.calendar_event_status", return_value=state):
+            ambiguous = self.client.get("/events?period=upcoming")
+        self.assertIn(
+            'disabled title="Several calendar events match.', ambiguous.text)
+
+    def test_calendar_remove_checks_target_and_match(self):
+        (self.root / ".env").write_text(
+            "SOCIAL_APPLE_CALENDAR=Example Account/main\n", encoding="utf-8")
+        path = "/events/{}".format(self.event_id)
+        ready = {"ready": True, "message": "Calendar ready: Example Account/main."}
+        state = dict(ready, present_ids={self.event_id}, ambiguous_ids=set())
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SOCIAL_APPLE_CALENDAR", None)
+            with patch("web.app.calendar_event_status", return_value=state), \
+                    patch("web.app.calendar_readiness", return_value=ready):
+                detail = self.client.get(path)
+                self.assertIn("Remove from Calendar", detail.text)
+                token = re.search(r'name="csrf_token" value="([^"]+)"', detail.text).group(1)
+                with patch("web.app.remove_event", return_value="removed") as remove:
+                    response = self.client.post(
+                        path + "/calendar/remove", data={"csrf_token": token},
+                        headers={"accept": "application/json"},
+                    )
+                    self.assertEqual(response.json(), {"state": "removed"})
+                    self.assertEqual(remove.call_args.args[1], "Example Account/main")
+                    self.assertEqual(remove.call_args.args[2]["id"], self.event_id)
+                    redirected = self.client.post(
+                        path + "/calendar/remove", data={
+                            "csrf_token": token, "return_to": "/events?period=upcoming",
+                        }, follow_redirects=False,
+                    )
+                    self.assertEqual(redirected.status_code, 303)
+                    self.assertEqual(redirected.headers["location"],
+                                     "/events?period=upcoming")
+                with patch("web.app.remove_event", side_effect=CalendarWriteError(
+                        "Several calendar events match this record.")):
+                    conflict = self.client.post(
+                        path + "/calendar/remove", data={"csrf_token": token},
+                        headers={"accept": "application/json"},
+                    )
+                    self.assertEqual(conflict.status_code, 409)
+                self.assertEqual(self.client.post(
+                    path + "/calendar/remove", data={}).status_code, 403)
 
     def test_catalog_page_no_longer_exists(self):
         self.assertEqual(self.client.get("/catalog").status_code, 404)

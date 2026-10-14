@@ -6,6 +6,31 @@ Start it from the repo root with `python3 social.py web`, or run `python3 web/st
 
 The server listens only on `127.0.0.1`. It does not expose the application to the local network or the internet.
 
+### Add or remove an event in Apple Calendar
+
+Apple Calendar can sync a saved event to a linked Google account. On macOS,
+run `python3 social.py calendars` to list writable calendars. Copy the exact
+`Account/Calendar` name into your local `.env` file. The tracked `sample.env`
+shows the format without a personal account name:
+
+```sh
+SOCIAL_APPLE_CALENDAR=name@example.com/main
+```
+
+Replace the example with the exact name shown by the command. Do not add
+quotes; the value can include spaces if the account or calendar name has them.
+
+Each user sets this value on their own Mac. The app reads it when a page opens,
+so a server restart is not needed. The **Events** table has an **Add** button
+in its last column. It shows **Added** and **Remove** when an event is in the
+selected calendar. Remove deletes one matching calendar event, but keeps the
+crawler record. If several events match, remove one in Apple Calendar.
+The app disables **Add** and shows a setup message when the calendar is not
+writable or access is missing. If an event has no end time, enter one in the
+dialog before you save. The event detail page has the same actions.
+The linked account handles later sync. A local save does not confirm that
+Google has received the event.
+
 The local server watches Python modules, Jinja templates, CSS, and JavaScript. It reloads after you save a change, so you do not have to restart it. Refresh the browser to request the changed page or asset.
 
 Events and Calendar each save filter selections in your browser. Calendar also

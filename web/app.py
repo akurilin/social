@@ -2,11 +2,14 @@ import json
 import mimetypes
 import calendar as calendar_lib
 import datetime as dt
+import hmac
+import secrets
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -14,6 +17,10 @@ from pydantic import ValidationError
 from .models import SourceEditorInput
 from .calendar_coverage import refresh_coverage
 from .calendar_logs import read_logs
+from .calendar_write import (
+    CalendarWriteError, calendar_event_status, calendar_readiness,
+    calendar_target, remove_event, save_event,
+)
 from .repository import PROBLEM_STATES, ROOT, Repository
 
 
@@ -24,7 +31,6 @@ STATIC_ASSET_VERSIONS = {
     name: (STATIC_ROOT / name).stat().st_mtime_ns
     for name in VERSIONED_STATIC_ASSET_NAMES
 }
-STYLESHEET_SUFFIX = ".css"
 NO_STORE_CACHE_CONTROL = "no-store"
 DEFAULT_EVENT_SORT = "start"
 DEFAULT_EVENT_SORT_DIRECTION = "asc"
@@ -65,11 +71,10 @@ async def require_current_database_schema(request, call_next):
     return await call_next(request)
 
 
-async def disable_stylesheet_cache(request, call_next):
-    # Always load current CSS while the control center is in development.
+async def disable_response_cache(request, call_next):
+    # Each refresh must fetch current pages and assets after a code change.
     response = await call_next(request)
-    if request.url.path.endswith(STYLESHEET_SUFFIX):
-        response.headers["Cache-Control"] = NO_STORE_CACHE_CONTROL
+    response.headers["Cache-Control"] = NO_STORE_CACHE_CONTROL
     return response
 
 
@@ -79,8 +84,9 @@ def create_app(root=ROOT, db_path=None):
         description="Manage event discovery sources, runs, events, and crawler instructions.",
     )
     application.state.repo = Repository(root=root, db_path=db_path)
+    application.state.calendar_csrf_token = secrets.token_urlsafe(32)
     application.middleware("http")(require_current_database_schema)
-    application.middleware("http")(disable_stylesheet_cache)
+    application.middleware("http")(disable_response_cache)
     application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     return application
 
@@ -422,12 +428,17 @@ def events(request: Request):
         selected_source_ids, source_filter_active))
     calendar_url = query_url("/calendar", calendar_filters)
     coverage = repo(request).calendar_coverage()
+    target = calendar_target(repo(request).root)
+    calendar_state = calendar_event_status(repo(request).cache_path, target, items)
     return page(
         request, "events.html", title="Events", events=items, query=query,
         rank=rank, period=period, sort=sort, direction=direction,
         **sources,
         sort_links=sort_links, calendar_url=calendar_url,
         calendar_nav_url=calendar_url,
+        calendar_state=calendar_state,
+        calendar_csrf_token=request.app.state.calendar_csrf_token,
+        calendar_timezone=repo(request).load_catalog().get("timezone") or "event local time",
         coverage=coverage, coverage_by_date={day["date"]: day for day in coverage["days"]},
     )
 
@@ -528,9 +539,128 @@ def event_calendar(request: Request):
     )
 
 
+def event_detail_page(request, event, notice=None, error=None, target=None, readiness=None):
+    target = calendar_target(repo(request).root) if target is None else target
+    calendar_state = (calendar_event_status(repo(request).cache_path, target, [event])
+                      if readiness is None else dict(
+                          readiness, present_ids=set(), ambiguous_ids=set()))
+    return page(
+        request, "event_detail.html", title=event["title"], event=event,
+        calendar_target=target, calendar_readiness=calendar_state,
+        calendar_state=calendar_state,
+        calendar_notice=notice, calendar_error=error,
+        calendar_csrf_token=request.app.state.calendar_csrf_token,
+        calendar_timezone=repo(request).load_catalog().get("timezone") or "event local time",
+    )
+
+
 @app.get("/events/{event_id}", response_class=HTMLResponse)
 def event_detail(request: Request, event_id: str):
     event = repo(request).get_event(event_id)
     if not event:
         raise HTTPException(404, "Event not found")
-    return page(request, "event_detail.html", title=event["title"], event=event)
+    notices = {
+        "saved": "Event saved in Apple Calendar. Check the linked account for sync.",
+        "already_added": "This event is already in the selected calendar.",
+        "removed": "Event removed from the selected Apple calendar.",
+        "not_found": "This event is no longer in the selected Apple calendar.",
+    }
+    return event_detail_page(
+        request, event, notice=notices.get(request.query_params.get("calendar")))
+
+
+@app.post("/events/{event_id}/calendar", response_class=HTMLResponse)
+async def add_event_to_calendar(request: Request, event_id: str):
+    values = await form_values(request)
+    wants_json = "application/json" in request.headers.get("accept", "")
+    if not hmac.compare_digest(
+            values.get("csrf_token", ""), request.app.state.calendar_csrf_token):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid calendar request")
+    event = repo(request).get_event(event_id)
+    if not event:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found")
+    if event["status"] != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only active events can be added to Calendar")
+    target = calendar_target(repo(request).root)
+    with repo(request).calendar_save_lock:
+        readiness = calendar_readiness(repo(request).cache_path, target)
+        if not readiness["ready"]:
+            if wants_json:
+                return JSONResponse(
+                    {"detail": readiness["message"]},
+                    status_code=status.HTTP_409_CONFLICT)
+            response = event_detail_page(
+                request, event, target=target, readiness=readiness)
+            response.status_code = status.HTTP_409_CONFLICT
+            return response
+        try:
+            start = dt.datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+            if event["end"]:
+                end = dt.datetime.fromisoformat(event["end"].replace("Z", "+00:00"))
+            else:
+                raw_end = values.get("end", "")
+                end = dt.datetime.fromisoformat(raw_end)
+                if end.tzinfo is not None:
+                    raise ValueError("End time must be local")
+                zone_name = repo(request).load_catalog().get("timezone")
+                zone = ZoneInfo(zone_name) if zone_name else start.tzinfo
+                end = end.replace(tzinfo=zone)
+            if end <= start:
+                raise ValueError("End time must follow start time")
+            state = save_event(repo(request).cache_path, target, event, end.isoformat())
+        except (ValueError, ZoneInfoNotFoundError):
+            message = "Enter an end time after the event start."
+        except CalendarWriteError as error:
+            message = str(error)
+        else:
+            if wants_json:
+                return JSONResponse({"state": state})
+            return_to = values.get("return_to", "")
+            if return_to == "/events" or return_to.startswith("/events?"):
+                return RedirectResponse(return_to, status_code=status.HTTP_303_SEE_OTHER)
+            return RedirectResponse(
+                query_url("/events/{}".format(event_id), {"calendar": state}),
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+    if wants_json:
+        return JSONResponse({"detail": message}, status_code=status.HTTP_400_BAD_REQUEST)
+    response = event_detail_page(request, event, error=message)
+    response.status_code = status.HTTP_400_BAD_REQUEST
+    return response
+
+
+@app.post("/events/{event_id}/calendar/remove", response_class=HTMLResponse)
+async def remove_event_from_calendar(request: Request, event_id: str):
+    values = await form_values(request)
+    wants_json = "application/json" in request.headers.get("accept", "")
+    if not hmac.compare_digest(
+            values.get("csrf_token", ""), request.app.state.calendar_csrf_token):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid calendar request")
+    event = repo(request).get_event(event_id)
+    if not event:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found")
+    target = calendar_target(repo(request).root)
+    with repo(request).calendar_save_lock:
+        readiness = calendar_readiness(repo(request).cache_path, target)
+        if not readiness["ready"]:
+            message = readiness["message"]
+        else:
+            try:
+                state = remove_event(repo(request).cache_path, target, event)
+            except CalendarWriteError as error:
+                message = str(error)
+            else:
+                if wants_json:
+                    return JSONResponse({"state": state})
+                return_to = values.get("return_to", "")
+                if return_to == "/events" or return_to.startswith("/events?"):
+                    return RedirectResponse(return_to, status_code=status.HTTP_303_SEE_OTHER)
+                return RedirectResponse(
+                    query_url("/events/{}".format(event_id), {"calendar": state}),
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+    if wants_json:
+        return JSONResponse({"detail": message}, status_code=status.HTTP_409_CONFLICT)
+    response = event_detail_page(request, event, error=message)
+    response.status_code = status.HTTP_409_CONFLICT
+    return response

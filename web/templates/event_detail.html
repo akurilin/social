@@ -16,6 +16,27 @@
   </div>
 </header>
 
+{% if event.id in calendar_state.present_ids %}
+<section class="alert info calendar-save" aria-label="Remove from calendar">
+  <form method="post" action="/events/{{ event.id }}/calendar/remove" data-calendar-confirm-remove data-event-title="{{ event.title }}">
+    <input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}">
+    <div><strong>In Apple Calendar</strong><span>{{ calendar_readiness.message }}</span><small>Removal does not change this event record.</small></div>
+    <button class="button secondary" type="submit"{% if event.id in calendar_state.ambiguous_ids %} disabled title="Several calendar events match. Remove one in Apple Calendar."{% endif %}>Remove from Calendar</button>
+  </form>
+</section>
+{% elif event.status == 'active' %}
+<section class="alert info calendar-save" aria-label="Add to calendar">
+  <form method="post" action="/events/{{ event.id }}/calendar">
+    <input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}">
+    <div><strong>Add to Calendar</strong><span>{{ calendar_readiness.message }}</span>{% if not calendar_readiness.ready %}<small>See <code>sample.env</code> for setup.</small>{% endif %}</div>
+    {% if not event.end %}<label>End time ({{ calendar_timezone }}) <input type="datetime-local" name="end" required{% if not calendar_readiness.ready %} disabled{% endif %}><small>This event has no end time. Enter one before you save it.</small></label>{% endif %}
+    <button class="button primary" type="submit"{% if not calendar_readiness.ready %} disabled aria-disabled="true"{% endif %}>Add to Calendar</button>
+  </form>
+</section>
+{% endif %}
+{% if calendar_notice %}<div class="alert info" role="status">{{ calendar_notice }}</div>{% endif %}
+{% if calendar_error %}<div class="alert error" role="alert">{{ calendar_error }}</div>{% endif %}
+
 <div class="detail-main">
     <section class="panel read-only-section">
       <div class="section-head"><div><p class="eyebrow">Crawler record</p><h2>Event details</h2></div><span class="section-note">First added {{ event.first_seen }} · Last seen {{ event.last_seen }}</span></div>

@@ -248,4 +248,99 @@ document.addEventListener("DOMContentLoaded", () => {
       if (event.target === dialog) dialog.close();
     });
   });
+
+  const calendarEndDialog = document.querySelector("[data-calendar-end-dialog]");
+  const calendarListStatus = document.querySelector("[data-calendar-list-status]");
+  let pendingCalendarForm = null;
+  const saveCalendarForm = async (form, end = "") => {
+    const button = form.querySelector("button[type='submit']");
+    button.disabled = true;
+    button.textContent = "Saving…";
+    const body = new URLSearchParams(new FormData(form));
+    if (end) body.set("end", end);
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Calendar save failed.");
+      const cell = form.closest("td");
+      form.hidden = true;
+      cell.querySelector("[data-calendar-added]").hidden = false;
+      cell.querySelector("[data-calendar-remove]").hidden = false;
+      if (calendarListStatus) calendarListStatus.textContent = result.state === "saved"
+        ? "Saved in Apple Calendar. Check the linked account for sync."
+        : "This event is already in the selected calendar.";
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Add";
+      if (calendarListStatus) calendarListStatus.textContent = error.message;
+    }
+  };
+  document.querySelectorAll("form[data-calendar-add]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (form.hasAttribute("data-needs-end")) {
+        pendingCalendarForm = form;
+        calendarEndDialog.querySelector("[data-calendar-end-event]").textContent =
+          `${form.dataset.eventTitle} · Starts ${form.dataset.eventStart.replace("T", " ")}`;
+        calendarEndDialog.querySelector("input[name='end']").value = "";
+        calendarEndDialog.showModal();
+      } else {
+        saveCalendarForm(form);
+      }
+    });
+  });
+  document.querySelectorAll("form[data-calendar-remove]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!window.confirm(`Remove “${form.dataset.eventTitle}” from the selected Apple calendar?`)) return;
+      const button = form.querySelector("button[type='submit']");
+      button.disabled = true;
+      button.textContent = "Removing…";
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(new FormData(form)),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Calendar removal failed.");
+        const cell = form.closest("td");
+        form.hidden = true;
+        cell.querySelector("[data-calendar-added]").hidden = true;
+        cell.querySelector("[data-calendar-add]").hidden = false;
+        if (calendarListStatus) calendarListStatus.textContent = result.state === "removed"
+          ? "Removed from the selected Apple calendar."
+          : "This event is no longer in the selected Apple calendar.";
+      } catch (error) {
+        if (calendarListStatus) calendarListStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+        button.textContent = "Remove";
+      }
+    });
+  });
+  document.querySelectorAll("form[data-calendar-confirm-remove]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      if (!window.confirm(`Remove “${form.dataset.eventTitle}” from the selected Apple calendar?`)) {
+        event.preventDefault();
+      }
+    });
+  });
+  if (calendarEndDialog) {
+    calendarEndDialog.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!pendingCalendarForm) return;
+      const end = calendarEndDialog.querySelector("input[name='end']").value;
+      const form = pendingCalendarForm;
+      calendarEndDialog.close();
+      saveCalendarForm(form, end);
+    });
+    calendarEndDialog.querySelector("[data-calendar-end-cancel]").addEventListener(
+      "click", () => calendarEndDialog.close());
+    calendarEndDialog.addEventListener("close", () => { pendingCalendarForm = null; });
+  }
 });

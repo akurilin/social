@@ -90,6 +90,8 @@ class Repository:
         self.calendar_refresh_lock = threading.Lock()
         self.calendar_refresh_cancel = threading.Event()
         self.calendar_refresh_state_lock = threading.Lock()
+        # Serialize calendar changes so each action sees the last one.
+        self.calendar_save_lock = threading.Lock()
 
     def load_calendar_coverage(self):
         with closing(self.connect()) as con:

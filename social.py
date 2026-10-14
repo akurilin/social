@@ -16,6 +16,7 @@ usage: python3 social.py <command>
 
 commands:
   web    start the local web control center (installs deps if missing)
+  calendars  list writable Apple Calendars for .env setup
   migrate  apply pending social.db schema migrations
   db-status  show the current and required database schema versions
   test   run all validation: catalog-check on sources.json, then the test suite
@@ -56,6 +57,18 @@ def cmd_web():
     main()
 
 
+def cmd_calendars():
+    from web.calendar_write import CalendarWriteError, list_calendars
+
+    try:
+        calendars = list_calendars(ROOT / ".cache")
+    except CalendarWriteError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
+    for calendar in calendars:
+        print(calendar["selector"])
+
+
 def run_store_command(command):
     result = subprocess.run(
         [sys.executable, "tools/events_store.py", command], cwd=ROOT)
@@ -88,6 +101,8 @@ def main(argv):
     command = argv[0]
     if command == "web":
         cmd_web()
+    elif command == "calendars":
+        cmd_calendars()
     elif command == "migrate":
         run_store_command("migrate-db")
     elif command == "db-status":
