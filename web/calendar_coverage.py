@@ -4,9 +4,12 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import signal
 import time
+from contextlib import ExitStack
 from contextvars import ContextVar
+from functools import lru_cache
 import shutil
 import subprocess
 import sys
@@ -14,11 +17,14 @@ import tempfile
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .calendar_logs import error_details, record, refresh_log, stage
+from .calendar_logs import ACTIVE_LOG, CommandOutput, error_details, record, refresh_log, stage
 
 
 PROCESS_POLL_SECONDS = 0.1
 PROCESS_SUCCESS = 0
+VERSION_TIMEOUT_SECONDS = 5
+VERSION_CACHE_ENTRIES = 4
+VERSION_PATTERN = re.compile(r"(?:codex-cli )?(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.]+)?)(?: \(Claude Code\))?")
 REFRESH_CANCEL = ContextVar("calendar_refresh_cancel", default=None)
 COVERAGE_DAYS = 14
 MODEL = "gpt-5.6-luna"
@@ -109,52 +115,79 @@ def check_stopped():
         raise CalendarRefreshStopped()
 
 
-def run_command(command, *, timeout, check=False, capture_output=False, **kwargs):
-    with stage("command", executable=Path(command[0]).name, timeout_seconds=timeout):
-        return _run_command(command, timeout=timeout, check=check,
-                            capture_output=capture_output, **kwargs)
+def run_command(command, *, timeout, check=False, capture_output=False, purpose="helper", **kwargs):
+    diagnostics = CommandOutput()
+    with stage("command", executable=Path(command[0]).name, timeout_seconds=timeout,
+               purpose=purpose, command_id=diagnostics.command_id):
+        try:
+            result = _run_command(command, timeout=timeout, check=check,
+                                  capture_output=capture_output, diagnostics=diagnostics, **kwargs)
+            diagnostics.observe(result.stdout, result.stderr, final=True)
+            return result
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+            diagnostics.observe(error.output, error.stderr, final=True)
+            raise
+        finally:
+            record("command.output", **diagnostics.details())
 
 
-def _run_command(command, *, timeout, check=False, capture_output=False, **kwargs):
+def _run_command(command, *, timeout, check=False, capture_output=False, diagnostics, **kwargs):
     # Poll child processes so a stop also ends calendar and model work.
-    if REFRESH_CANCEL.get() is None:
+    if REFRESH_CANCEL.get() is None and ACTIVE_LOG.get() is None:
         return subprocess.run(command, timeout=timeout, check=check,
                               capture_output=capture_output, **kwargs)
     check_stopped()
     input_text = kwargs.pop("input", None)
-    if capture_output:
-        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if input_text is not None:
-        kwargs["stdin"] = subprocess.PIPE
-    with subprocess.Popen(command, start_new_session=True, **kwargs) as process:
-        deadline = time.monotonic() + timeout
-        last_output = last_stderr = None
-        try:
-            while True:
+    # File input stays complete across polling timeouts, including on Python 3.12.
+    with ExitStack() as resources:
+        if input_text is not None:
+            input_file = resources.enter_context(tempfile.TemporaryFile())
+            input_size = input_file.write(input_text.encode(kwargs.get("encoding") or "utf-8")
+                                          if isinstance(input_text, str) else input_text)
+            input_file.seek(0)
+            kwargs["stdin"] = input_file
+            record("command.input_ready", command_id=diagnostics.command_id,
+                   input_mode="file", input_bytes=input_size)
+        if capture_output:
+            kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with subprocess.Popen(command, start_new_session=True, **kwargs) as process:
+            record("command.spawned", pid=process.pid, command_id=diagnostics.command_id)
+            deadline = time.monotonic() + timeout
+            last_output = last_stderr = None
+            try:
+                while True:
+                    check_stopped()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout, output=last_output, stderr=last_stderr)
+                    try:
+                        stdout, stderr = process.communicate(
+                            timeout=min(PROCESS_POLL_SECONDS, remaining))
+                        break
+                    except subprocess.TimeoutExpired as error:
+                        last_output, last_stderr = error.output, error.stderr
+                        diagnostics.observe(last_output, last_stderr)
                 check_stopped()
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise subprocess.TimeoutExpired(command, timeout, output=last_output, stderr=last_stderr)
-                try:
-                    stdout, stderr = process.communicate(
-                        input=input_text, timeout=min(PROCESS_POLL_SECONDS, remaining))
-                    break
-                except subprocess.TimeoutExpired as error:
-                    last_output, last_stderr = error.output, error.stderr
-                    input_text = None
-            check_stopped()
-            if check and process.returncode != PROCESS_SUCCESS:
-                raise subprocess.CalledProcessError(process.returncode, command,
-                                                    output=stdout, stderr=stderr)
-            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-        finally:
-            # Kill the process group to include CLI child processes.
-            if process.poll() is None:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                process.communicate()
+                record("command.exited", pid=process.pid, exit_code=process.returncode,
+                       command_id=diagnostics.command_id)
+                if check and process.returncode != PROCESS_SUCCESS:
+                    raise subprocess.CalledProcessError(process.returncode, command,
+                                                        output=stdout, stderr=stderr)
+                return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+            finally:
+                # Kill the process group to include CLI child processes.
+                error = sys.exc_info()[1]
+                if process.poll() is None or isinstance(error, (subprocess.TimeoutExpired, CalendarRefreshStopped)):
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    stdout, stderr = process.communicate()
+                    diagnostics.observe(stdout, stderr, final=True)
+                    if isinstance(error, subprocess.TimeoutExpired):
+                        error.output, error.stderr = stdout, stderr
+                    record("command.terminated", pid=process.pid, exit_code=process.returncode,
+                           command_id=diagnostics.command_id)
 
 
 def blank_days(today, state=UNKNOWN):
@@ -165,16 +198,18 @@ def blank_days(today, state=UNKNOWN):
 def coverage_view(snapshot, today):
     snapshot = snapshot or {}
     stored = {day["date"]: day["state"] for day in snapshot.get("days", [])}
+    added_dates = {item["date"] for item in snapshot.get("added_events", {}).values()}
     days = blank_days(today)
     for day in days:
         date = dt.date.fromisoformat(day["date"])
-        day["state"] = stored.get(day["date"], UNKNOWN)
+        day["state"] = PLANNED if day["date"] in added_dates else stored.get(day["date"], UNKNOWN)
         day["label"] = STATE_LABELS[day["state"]]
         day["weekday"] = date.strftime("%a")
         day["short_date"] = date.strftime("%b %-d")
     return {
         "days": days,
-        "message": snapshot.get("message", "Refresh to check your calendar."),
+        "message": ("Events added here count as social plans. Refresh to check other plans."
+                    if added_dates else snapshot.get("message", "Refresh to check your calendar.")),
         "checked_at": snapshot.get("checked_at"),
         "timezone": snapshot.get("timezone", ""),
         "window_label": "{} – {}".format(days[0]["short_date"], days[-1]["short_date"]),
@@ -237,6 +272,19 @@ def read_apple_calendar(cache_path, today):
         raise CalendarCoverageError("Apple Calendar could not be read. Try again.") from error
 
 
+@lru_cache(maxsize=VERSION_CACHE_ENTRIES)
+def client_version(binary):
+    # Identify the installed client without a sign-in check or model request.
+    try:
+        result = run_command([binary, "--version"], capture_output=True, text=True,
+                             check=True, timeout=VERSION_TIMEOUT_SECONDS, purpose="client_version")
+        match = VERSION_PATTERN.fullmatch(result.stdout.strip())
+        return match.group(1) if match else "unavailable"
+    except (OSError, subprocess.SubprocessError, TypeError, AttributeError) as error:
+        record("client.version_unavailable", **error_details(error))
+        return "unavailable"
+
+
 def run_luna(prompt):
     binary = shutil.which("codex")
     if not binary:
@@ -249,7 +297,7 @@ def run_luna(prompt):
         schema.write_text(json.dumps(CLASSIFICATION_SCHEMA))
         command = [binary, "exec", "--ignore-user-config", "--ignore-rules",
                    "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
-                   "--model", MODEL, "--color", "never",
+                   "--model", MODEL, "--color", "never", "--json",
                    "-c", 'model_reasoning_effort="low"',
                    "-c", "project_doc_max_bytes=0", "-c", 'web_search="disabled"']
         for feature in ("shell_tool", "apps", "plugins", "multi_agent", "hooks",
@@ -257,13 +305,18 @@ def run_luna(prompt):
             command.extend(["--disable", feature])
         command.extend(["--output-schema", str(schema),
                         "--output-last-message", str(output), "-"])
+        record("client.configuration", client="codex", model=MODEL,
+               reasoning_effort="low", json_events=True, isolated=True,
+               version=client_version(binary))
         try:
             run_command(command, input=prompt, cwd=folder, capture_output=True,
-                           text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS)
+                           text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS, purpose="classification")
             return json.loads(output.read_text())
         except subprocess.TimeoutExpired as error:
             raise CalendarCoverageError("Luna check timed out. Try again.") from error
         except (OSError, subprocess.SubprocessError, ValueError) as error:
+            record("client.result_failed", reason=("invalid_json" if isinstance(error, ValueError)
+                                                 else "process_or_file_error"), **error_details(error))
             raise CalendarCoverageError(
                 "Luna check failed. Check Codex CLI sign-in and Luna access, then retry.") from error
 
@@ -278,10 +331,13 @@ def run_sonnet(prompt):
                    "--safe-mode", "--tools", "", "--permission-mode", "dontAsk",
                    "--no-session-persistence", "--output-format", "json",
                    "--json-schema", json.dumps(CLASSIFICATION_SCHEMA)]
+        record("client.configuration", client="claude", model=SONNET_MODEL,
+               reasoning_effort="low", json_events=False, isolated=True,
+               version=client_version(binary))
         try:
             result = run_command(
                 command, input=prompt, cwd=Path(temp), capture_output=True,
-                text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS)
+                text=True, check=True, timeout=MODEL_TIMEOUT_SECONDS, purpose="classification")
             data = json.loads(result.stdout)
             # Verbose JSON includes earlier messages; only the final result is authoritative.
             if isinstance(data, list):
@@ -295,6 +351,8 @@ def run_sonnet(prompt):
             raise CalendarCoverageError("Sonnet check timed out. Try again.") from error
         except (OSError, subprocess.SubprocessError, ValueError,
                 AttributeError, KeyError, TypeError) as error:
+            record("client.result_failed", reason=("invalid_json" if isinstance(error, json.JSONDecodeError)
+                                                 else "process_or_envelope_error"), **error_details(error))
             raise CalendarCoverageError(
                 "Sonnet check failed. Check Claude Code sign-in, version and Sonnet access, then retry.") from error
 
@@ -315,19 +373,26 @@ def classify_events(events, model=None):
     model = model or select_calendar_model()
     runners = {MODEL: run_luna, SONNET_MODEL: run_sonnet}
     result = runners[model](prompt)
+    reason = "missing_events"
     try:
         rows = result["events"]
+        reason = "result_count_mismatch"
         expected = {event["id"] for event in events}
         if not isinstance(rows, list) or len(rows) != len(events):
             raise ValueError("Missing results")
+        reason = "invalid_result_field"
         for row in rows:
             if type(row["id"]) is not int or any(
                     type(row[field]) is not bool for field in CLASSIFICATION_FIELDS):
                 raise ValueError("Invalid field type")
+        reason = "result_id_mismatch"
         if {row["id"] for row in rows} != expected:
             raise ValueError("Invalid result ids")
+        record("classification.validated", expected_count=len(events), result_count=len(rows))
         return rows
     except (KeyError, TypeError, ValueError) as error:
+        record("classification.invalid", reason=reason, expected_count=len(events),
+               result_count=len(rows) if isinstance(result, dict) and isinstance(result.get("events"), list) else None)
         raise CalendarCoverageError("Calendar model returned an incomplete check. Try again.") from error
 
 
@@ -376,6 +441,8 @@ def _logged_refresh(repository, today, cancel):
 def _refresh_coverage(repository, today=None):
     today = today or dt.date.today()
     snapshot = {"days": blank_days(today), "timezone": "", "model": None}
+    additions = (repository.load_calendar_coverage() or {}).get("added_events", {})
+    reconciled_additions = None
     outcome = "refresh.completed"
     try:
         with stage("calendar_read"):
@@ -391,6 +458,7 @@ def _refresh_coverage(repository, today=None):
                 decisions = classify_events(events, model=snapshot["model"])
         with stage("coverage", event_count=len(events)):
             snapshot["days"] = coverage_days(events, decisions, today, calendar["timezone"])
+        reconciled_additions = additions
         snapshot["timezone"] = calendar["timezone"]
         snapshot["message"] = "Calendar checked. Working in public counts; online and professional gatherings do not."
     except CalendarCoverageError as error:
@@ -404,7 +472,7 @@ def _refresh_coverage(repository, today=None):
     snapshot["checked_at"] = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     check_stopped()
     with stage("save"):
-        repository.save_calendar_coverage(snapshot)
+        repository.save_calendar_coverage(snapshot, reconciled_additions=reconciled_additions)
     record(outcome, model=snapshot["model"], message=snapshot["message"],
            day_counts={state: sum(day["state"] == state for day in snapshot["days"])
                        for state in STATE_LABELS})

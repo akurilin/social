@@ -858,13 +858,77 @@ class WebControlCenterTests(unittest.TestCase):
                         path + "/calendar", data={"csrf_token": token, "end": end},
                         headers={"accept": "application/json"},
                     )
-                    self.assertEqual(json_response.json(), {"state": "saved"})
+                    self.assertEqual(json_response.json()["state"], "saved")
                     invalid = self.client.post(
                         path + "/calendar", data={"csrf_token": token, "end": "2020-01-01T09:00"},
                     )
                     self.assertEqual(invalid.status_code, 400)
                     self.assertEqual(save.call_count, 3)
                 self.assertEqual(self.client.post(path + "/calendar", data={"end": end}).status_code, 403)
+
+    def test_calendar_add_updates_coverage_without_scan(self):
+        repository = app.state.repo
+        event = repository.get_event(self.event_id)
+        date = event["start"][:10]
+        path = "/events/{}/calendar".format(self.event_id)
+        data = {"csrf_token": app.state.calendar_csrf_token,
+                "end": date + "T21:00"}
+        headers = {"accept": "application/json"}
+        ready = {"ready": True, "message": "Ready"}
+        with patch("web.app.calendar_readiness", return_value=ready), \
+                patch("web.app.save_event", return_value="saved") as save, \
+                patch("web.app.remove_event", return_value="removed"), \
+                patch("web.calendar_coverage.read_apple_calendar") as scan:
+            # A failed save must not change unchecked dates.
+            save.side_effect = CalendarWriteError("Save failed")
+            self.assertEqual(self.client.post(path, data=data, headers=headers).status_code, 400)
+            self.assertIsNone(repository.load_calendar_coverage())
+            save.side_effect = None
+            for state in ("saved", "already_added"):
+                save.return_value = state
+                response = self.client.post(path, data=data, headers=headers)
+                self.assertEqual(response.status_code, 200)
+                days = {day["date"]: day for day in response.json()["coverage"]["days"]}
+                self.assertEqual(days[date]["state"], "planned")
+                self.assertIsNone(response.json()["coverage"]["checked_at"])
+            # The persisted result must reach both pages without a calendar scan.
+            fresh = Repository(self.root, self.database)
+            self.assertEqual(next(day for day in fresh.calendar_coverage()["days"]
+                                  if day["date"] == date)["state"], "planned")
+            for page in ("/events", "/calendar?month=" + self.month):
+                html = self.client.get(page).text
+                self.assertRegex(html, r'coverage-tile coverage-planned" data-coverage-date="' + date)
+            # Keep the day green when another confirmed event is still present.
+            other = dict(event, id="other-confirmed-event")
+            repository.update_calendar_plan(other, added=True)
+            removed = self.client.post(path + "/remove", data=data, headers=headers)
+            self.assertEqual(next(day for day in removed.json()["coverage"]["days"]
+                                  if day["date"] == date)["state"], "planned")
+            repository.update_calendar_plan(other, added=False)
+            self.assertEqual(next(day for day in repository.calendar_coverage()["days"]
+                                  if day["date"] == date)["state"], "unknown")
+            scan.assert_not_called()
+            # A scan failure keeps confirmed adds; a completed scan replaces them.
+            from web.calendar_coverage import CalendarCoverageError, refresh_coverage
+            repository.update_calendar_plan(event, added=True)
+            scan.side_effect = CalendarCoverageError("Read failed")
+            failed = refresh_coverage(repository)
+            self.assertEqual(next(day for day in failed["days"]
+                                  if day["date"] == date)["state"], "planned")
+
+            def add_during_scan(*args):
+                repository.update_calendar_plan(event, added=True)
+                return {"events": [], "timezone": "America/New_York"}
+
+            scan.side_effect = add_during_scan
+            concurrent = refresh_coverage(repository)
+            self.assertEqual(next(day for day in concurrent["days"]
+                                  if day["date"] == date)["state"], "planned")
+            scan.side_effect = None
+            scan.return_value = {"events": [], "timezone": "America/New_York"}
+            completed = refresh_coverage(repository)
+            self.assertEqual(next(day for day in completed["days"]
+                                  if day["date"] == date)["state"], "open")
 
     def test_calendar_save_stays_disabled_for_unverified_target(self):
         (self.root / ".env").write_text(
@@ -926,7 +990,7 @@ class WebControlCenterTests(unittest.TestCase):
                         path + "/calendar/remove", data={"csrf_token": token},
                         headers={"accept": "application/json"},
                     )
-                    self.assertEqual(response.json(), {"state": "removed"})
+                    self.assertEqual(response.json()["state"], "removed")
                     self.assertEqual(remove.call_args.args[1], "Example Account/main")
                     self.assertEqual(remove.call_args.args[2]["id"], self.event_id)
                     redirected = self.client.post(

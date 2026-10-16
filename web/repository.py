@@ -99,13 +99,43 @@ class Repository:
                 "SELECT snapshot_json FROM calendar_coverage WHERE id = 1").fetchone()
         return json_value(row["snapshot_json"], None) if row else None
 
-    def save_calendar_coverage(self, snapshot):
-        # Keep only day states; personal calendar contents stay out of the event store.
+    def save_calendar_coverage(self, snapshot, reconciled_additions=None):
+        # Keep adds made during a scan; a completed scan replaces earlier adds.
         with closing(self.connect()) as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT snapshot_json FROM calendar_coverage WHERE id = 1").fetchone()
+            previous = json_value(row["snapshot_json"], {}) if row else {}
+            additions = previous.get("added_events", {})
+            for event_id, addition in (reconciled_additions or {}).items():
+                if additions.get(event_id) == addition:
+                    additions.pop(event_id)
+            snapshot = dict(snapshot, added_events=additions)
             con.execute(
                 "INSERT INTO calendar_coverage (id, snapshot_json) VALUES (1, ?) "
                 "ON CONFLICT(id) DO UPDATE SET snapshot_json = excluded.snapshot_json",
                 (json.dumps(snapshot),))
+
+    def update_calendar_plan(self, event, added):
+        # Store confirmed event dates so Add needs no model check and Remove can undo it.
+        with closing(self.connect()) as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                "SELECT snapshot_json FROM calendar_coverage WHERE id = 1").fetchone()
+            snapshot = json_value(row["snapshot_json"], {}) if row else {}
+            additions = snapshot.setdefault("added_events", {})
+            if added:
+                additions[event["id"]] = {
+                    "date": event["start"][:10],
+                    "saved_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                }
+            else:
+                additions.pop(event["id"], None)
+            con.execute(
+                "INSERT INTO calendar_coverage (id, snapshot_json) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET snapshot_json = excluded.snapshot_json",
+                (json.dumps(snapshot),))
+        return self.calendar_coverage()
 
     def calendar_coverage(self, today=None):
         return coverage_view(self.load_calendar_coverage(), today or dt.date.today())

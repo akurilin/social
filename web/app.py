@@ -613,8 +613,9 @@ async def add_event_to_calendar(request: Request, event_id: str):
         except CalendarWriteError as error:
             message = str(error)
         else:
+            coverage = repo(request).update_calendar_plan(event, added=True)
             if wants_json:
-                return JSONResponse({"state": state})
+                return JSONResponse({"state": state, "coverage": coverage})
             return_to = values.get("return_to", "")
             if return_to == "/events" or return_to.startswith("/events?"):
                 return RedirectResponse(return_to, status_code=status.HTTP_303_SEE_OTHER)
@@ -650,8 +651,9 @@ async def remove_event_from_calendar(request: Request, event_id: str):
             except CalendarWriteError as error:
                 message = str(error)
             else:
+                coverage = repo(request).update_calendar_plan(event, added=False)
                 if wants_json:
-                    return JSONResponse({"state": state})
+                    return JSONResponse({"state": state, "coverage": coverage})
                 return_to = values.get("return_to", "")
                 if return_to == "/events" or return_to.startswith("/events?"):
                     return RedirectResponse(return_to, status_code=status.HTTP_303_SEE_OTHER)

@@ -46,7 +46,8 @@ Green means a social plan; red means no social plan was found.
 Pastel blue means unchecked or unavailable. Time in cafés, libraries and hotel
 bars counts, including solo work, study or reading. Online events and
 professional gatherings do not count. Page loads and crawler syncs do not
-start a check.
+start a check. Adding an event here turns its day green at once, without a
+scan. Removing it clears that confirmation; other plans on the day still count.
 
 Calendar access needs macOS, Apple Command Line Tools (`xcode-select --install`),
 and calendar permission. The reader compiles on the first refresh. If access
@@ -71,10 +72,11 @@ URLs to the selected model through its CLI. Both clients run in a temporary
 folder with session persistence and local instructions disabled. Codex runs
 with shell, browser access and plugins disabled. Claude runs in safe mode
 with tools disabled; it does not use `--bare`, which requires API credentials.
-`social.db` stores only the latest day states, check time, time zone, selected
-model (or alias) and status message. Refresh replaces this
-result on both pages. New days remain blue until checked. Saved colors refer
-to the displayed check time; calendar edits need another refresh.
+`social.db` stores the latest day states, check time, time zone, selected
+model (or alias), status message and confirmed event IDs with dates and save
+times. A successful refresh replaces earlier confirmations on both pages.
+Adds made during a scan remain green. A failed scan keeps confirmations.
+Other calendar edits need another refresh.
 
 ### Calendar diagnostics
 
@@ -82,14 +84,37 @@ Select **View logs** beside the calendar check, or open
 `http://127.0.0.1:8000/calendar-coverage/logs`.
 Logs start with the next refresh; earlier errors cannot be recovered.
 
-Each refresh has a run ID. Logs record calendar reads, model selection,
-event and prompt sizes, stage times, process exit codes, timeouts, stops,
-validation failures, and final day counts. A start with no end record means
-work is still active or the server stopped before it could write the result.
-CLI errors are reduced to known connection, limit, sign-in, model-access,
-and argument-error signals. Calendar text, prompts, full CLI output, and
-credentials are not saved. These signals help diagnosis but cannot prove
-why a remote model stalled.
+Each refresh has a run ID. Logs record calendar reads, client version and
+settings, event and prompt sizes, stage times, validation reasons and day counts.
+Local errors include causal types, OS error codes and source locations.
+Each process has a command ID and records its PID, exit or termination, output sizes, time to first
+output and time since the last output. A progress record appears every 10
+seconds while a process runs, including when the client is silent.
+`command.input_ready` confirms the full input size before the client starts.
+Input uses a temporary file so polling cannot interrupt a prompt transfer.
+
+Codex uses its [JSON event stream](https://learn.chatgpt.com/docs/non-interactive-mode)
+to record turn and item types. Error output from either client is reduced to
+fixed connection, retry, DNS, TLS, proxy, limit, sign-in and model-access signals,
+known error codes, HTTP error statuses and up to five provider request IDs.
+An error fingerprint lets you compare repeated failures without saving the text.
+Token counts are kept when the client supplies them. No prompts, calendar text,
+message bodies, credentials, command arguments or raw CLI output are saved.
+Event records and diagnostic line sizes are bounded. Oversized lines and event
+limits are reported in the process summary.
+
+Start with the latest `refresh.failed` and follow its run ID backward:
+
+- `command.started` without `command.spawned`: process launch failed.
+- `command.progress` with `output_state: silent`: the client supplied no output.
+- `last_client_event: turn.started`: a model turn began but did not finish.
+- `failure_codes`, `http_statuses`, `signals` and `request_ids`: client error facts.
+- `classification.invalid`: the response arrived but failed validation.
+- `command.terminated`: the app stopped the process group after a timeout or stop.
+
+These records distinguish observed failures. A silent remote service cannot
+explain its own cause; the log states that it was silent instead of guessing.
+A start with no end record means work is active or the server stopped.
 
 The local file is `.cache/logs/calendar-coverage.jsonl`. It rotates at 1 MB
 and keeps three backups. **View logs** includes all retained files.

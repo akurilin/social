@@ -75,7 +75,7 @@ class CalendarCoverageTests(unittest.TestCase):
         self.refresh([], [])
         with patch("web.calendar_coverage.read_apple_calendar", return_value={
                 "timezone": "America/New_York", "events": [calendar_event()]}), patch(
-                "web.calendar_coverage.subprocess.run",
+                "web.calendar_coverage._run_command",
                 side_effect=subprocess.TimeoutExpired("private command", 180,
                     stderr=b"private calendar data: reconnecting stream")):
             refresh_coverage(self.repo, TODAY)
@@ -175,7 +175,7 @@ class CalendarCoverageTests(unittest.TestCase):
 
     def test_non_mac_does_not_start_calendar_process(self):
         with patch("web.calendar_coverage.sys.platform", "linux"), patch(
-                "web.calendar_coverage.subprocess.run") as run:
+                "web.calendar_coverage._run_command") as run:
             with self.assertRaises(CalendarCoverageError):
                 read_apple_calendar(self.repo.cache_path, TODAY)
         run.assert_not_called()
@@ -185,7 +185,7 @@ class CalendarCoverageTests(unittest.TestCase):
             with self.subTest(status=status), patch(
                     "web.calendar_coverage.sys.platform", "darwin"), patch(
                     "web.calendar_coverage.build_calendar_reader", return_value=Path("reader")), patch(
-                    "web.calendar_coverage.subprocess.run", return_value=subprocess.CompletedProcess(
+                    "web.calendar_coverage._run_command", return_value=subprocess.CompletedProcess(
                         [], 0, stdout=json.dumps({"status": status}))):
                 with self.assertRaises(CalendarCoverageError):
                     read_apple_calendar(self.repo.cache_path, TODAY)
@@ -201,7 +201,7 @@ class CalendarCoverageTests(unittest.TestCase):
 
     def test_classifier_timeout_has_safe_error(self):
         with patch("web.calendar_coverage.shutil.which", return_value="/bin/codex"), patch(
-                "web.calendar_coverage.subprocess.run",
+                "web.calendar_coverage._run_command",
                 side_effect=subprocess.TimeoutExpired("codex", 1)):
             with self.assertRaisesRegex(CalendarCoverageError, "timed out"):
                 classify_events([calendar_event()])
@@ -213,7 +213,7 @@ class CalendarCoverageTests(unittest.TestCase):
                    "/bin/claude" if name == "claude" else None), patch(
                 "web.calendar_coverage.read_apple_calendar", return_value={
                     "timezone": "America/New_York", "events": [calendar_event()]}), patch(
-                "web.calendar_coverage.subprocess.run", return_value=subprocess.CompletedProcess(
+                "web.calendar_coverage._run_command", return_value=subprocess.CompletedProcess(
                     [], 0, stdout=json.dumps(payload))) as run:
             result = refresh_coverage(self.repo, TODAY)
 
@@ -232,7 +232,7 @@ class CalendarCoverageTests(unittest.TestCase):
     def test_codex_remains_first_choice(self):
         with patch("web.calendar_coverage.run_luna", return_value={
                 "events": [decision()]}) as luna, patch(
-                "web.calendar_coverage.subprocess.run") as run:
+                "web.calendar_coverage._run_command") as run:
             self.assertEqual(classify_events([calendar_event()]), [decision()])
         luna.assert_called_once()
         run.assert_not_called()
@@ -263,7 +263,7 @@ class CalendarCoverageTests(unittest.TestCase):
             with self.subTest(output=output), patch(
                     "web.calendar_coverage.shutil.which", side_effect=lambda name:
                     "/bin/claude" if name == "claude" else None), patch(
-                    "web.calendar_coverage.subprocess.run", return_value=subprocess.CompletedProcess(
+                    "web.calendar_coverage._run_command", return_value=subprocess.CompletedProcess(
                         [], 0, stdout=output)):
                 with self.assertRaises(CalendarCoverageError):
                     classify_events([calendar_event()])
@@ -275,14 +275,14 @@ class CalendarCoverageTests(unittest.TestCase):
                    "structured_output": {"events": [decision()]}}]
         with patch("web.calendar_coverage.shutil.which", side_effect=lambda name:
                    "/bin/claude" if name == "claude" else None), patch(
-                "web.calendar_coverage.subprocess.run", return_value=subprocess.CompletedProcess(
+                "web.calendar_coverage._run_command", return_value=subprocess.CompletedProcess(
                     [], 0, stdout=json.dumps(output))):
             self.assertEqual(classify_events([calendar_event()]), [decision()])
 
     def test_claude_timeout_does_not_reveal_calendar_contents(self):
         with patch("web.calendar_coverage.shutil.which", side_effect=lambda name:
                    "/bin/claude" if name == "claude" else None), patch(
-                "web.calendar_coverage.subprocess.run", side_effect=subprocess.TimeoutExpired(
+                "web.calendar_coverage._run_command", side_effect=subprocess.TimeoutExpired(
                     "private calendar data", 1)):
             with self.assertRaisesRegex(CalendarCoverageError, "Sonnet check timed out"):
                 classify_events([calendar_event()])

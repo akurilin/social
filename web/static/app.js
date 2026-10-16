@@ -86,6 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const coveragePanel = document.querySelector("[data-calendar-coverage]");
+  let renderCoverage = () => {};
   if (coveragePanel) {
     const refreshButton = coveragePanel.querySelector("[data-refresh-calendar]");
     const message = coveragePanel.querySelector("[data-coverage-message]");
@@ -97,6 +98,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const initialTime = updated.querySelector("time");
     if (initialTime) initialTime.textContent = formatCheckTime(initialTime.dateTime);
+
+    renderCoverage = (result) => {
+      // Rebuild the dates if midnight passed while this page was open.
+      const tiles = coveragePanel.querySelectorAll(".coverage-tile");
+      if (tiles[0].dataset.coverageDate !== result.days[0].date) {
+        window.location.reload();
+        return;
+      }
+      const days = new Map(result.days.map((day) => [day.date, day]));
+      // Apply the same saved result to the strip, date rows and month cells.
+      document.querySelectorAll("[data-coverage-date]").forEach((element) => {
+        const day = days.get(element.dataset.coverageDate);
+        coverageStates.forEach((state) => element.classList.remove(`coverage-${state}`));
+        if (day) element.classList.add(`coverage-${day.state}`);
+        const label = element.querySelector("[data-coverage-label]");
+        if (label) label.textContent = day?.label || "";
+        const symbol = element.querySelector(".coverage-symbol");
+        if (symbol) symbol.textContent = coverageSymbols[day?.state] || "·";
+        element.title = day ? `${day.date}: ${day.label}` : "";
+      });
+      message.textContent = result.message;
+      updated.textContent = result.checked_at ? `Last check: ${formatCheckTime(result.checked_at)}` : "";
+    };
 
     let refreshing = false;
     refreshButton.addEventListener("click", async () => {
@@ -133,26 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
           message.textContent = "Calendar refresh stopped. Displayed colors are from the last check.";
           return;
         }
-        // Rebuild the dates if midnight passed while this page was open.
-        const tiles = coveragePanel.querySelectorAll(".coverage-tile");
-        if (tiles[0].dataset.coverageDate !== result.days[0].date) {
-          window.location.reload();
-          return;
-        }
-        const days = new Map(result.days.map((day) => [day.date, day]));
-        // Apply the same saved result to the strip, date rows and month cells.
-        document.querySelectorAll("[data-coverage-date]").forEach((element) => {
-          const day = days.get(element.dataset.coverageDate);
-          coverageStates.forEach((state) => element.classList.remove(`coverage-${state}`));
-          if (day) element.classList.add(`coverage-${day.state}`);
-          const label = element.querySelector("[data-coverage-label]");
-          if (label) label.textContent = day?.label || "";
-          const symbol = element.querySelector(".coverage-symbol");
-          if (symbol) symbol.textContent = coverageSymbols[day?.state] || "·";
-          element.title = day ? `${day.date}: ${day.label}` : "";
-        });
-        message.textContent = result.message;
-        updated.textContent = `Last check: ${formatCheckTime(result.checked_at)}`;
+        renderCoverage(result);
       } catch (error) {
         message.textContent = `${error.message} Displayed colors are from the last check.`;
       } finally {
@@ -266,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail || "Calendar save failed.");
+      if (result.coverage) renderCoverage(result.coverage);
       const cell = form.closest("td");
       form.hidden = true;
       cell.querySelector("[data-calendar-added]").hidden = false;
@@ -308,6 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || "Calendar removal failed.");
+        if (result.coverage) renderCoverage(result.coverage);
         const cell = form.closest("td");
         form.hidden = true;
         cell.querySelector("[data-calendar-added]").hidden = true;
