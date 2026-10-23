@@ -16,7 +16,7 @@ from crawler.contracts import ParseError, source_result
 
 
 ADAPTER_ID = "book_club_bar_browser"
-PARSER_VERSION = "book-club-bar-api-v2"
+PARSER_VERSION = "book-club-bar-api-v3"
 METHOD = "python_adapter"
 API_BASE = "https://api.bookmanager.com/customer/"
 PAGE_SIZE = 20
@@ -32,6 +32,9 @@ DATE_PATTERN = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturd
 TIME_PATTERN = re.compile(r"^\d{1,2}:\d{2}\s*[AP]M$")
 BOOKING_LABEL = re.compile(r"\b(?:tickets?|register|reserve|rsvp)\b", re.I)
 EMPTY_TEXT = {"No upcoming events", "No events found"}
+# API location text is "Neighborhood, street"; keep a full address per room.
+STORE_ADDRESSES = {"East Village": "197 East 3rd Street, New York, NY",
+                   "Bushwick": "380 Troutman Street, Brooklyn, NY"}
 
 
 class BookClubBarAdapter:
@@ -85,6 +88,10 @@ class BookClubBarAdapter:
                     raise ParseError("Book Club Bar API returned a duplicate event")
                 seen.add(key)
                 evidence = {key: row.get(key) for key in PUBLIC_FIELDS}
+                if row.get("all_day") is True:
+                    # All-day rows carry placeholder clocks; never invent a start time.
+                    rejections.append({"reason": "missing_explicit_time", "raw": evidence})
+                    continue
                 try:
                     event = _api_event(evidence, source, response, timezone)
                     day = dt.datetime.fromisoformat(event["start"]).date()
@@ -273,8 +280,7 @@ def _api_event(raw, source, response, timezone):
         raise ParseError("Book Club Bar event has no title or location")
     copy = BeautifulSoup(str(raw.get("description") or raw.get("summary") or ""), "html.parser")
     description = _text(copy)
-    url = source["url"].rstrip("/") + "/" + str(raw["id"])
-    signup = url
+    signup = ""
     for link in copy.select("a[href]"):
         candidate = str(link["href"])
         if BOOKING_LABEL.search(_text(link)) and urlsplit(candidate).scheme in {"http", "https"}:
@@ -294,9 +300,12 @@ def _api_event(raw, source, response, timezone):
     event_id = hashlib.sha256(identity.encode()).hexdigest()
     return {
         "title": title, "start": start.isoformat(), "end": end.isoformat(),
-        "url": url, "signup_url": signup, "host": HOST,
+        # Prefer the ticket page; otherwise keep the event's own listing URL.
+        "url": signup or source["url"].rstrip("/") + "/" + str(raw["id"]),
+        "signup_url": signup, "host": HOST,
         "venue": HOST + " " + neighborhood if neighborhood else location.split(",", 1)[0],
-        "neighborhood": neighborhood, "address": location, "price": price, "is_free": free,
+        "neighborhood": neighborhood, "address": STORE_ADDRESSES.get(neighborhood, location),
+        "price": price, "is_free": free,
         "description": description, "capacity_flag": "private event" if re.search(r"\bprivate event\b", title, re.I) else None,
         "status": status, "source_id": source["id"], "source_listing_url": source["url"],
         "source_url": response.url, "source_event_id": event_id,

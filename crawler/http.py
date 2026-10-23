@@ -8,10 +8,10 @@ from http import HTTPStatus
 import time
 import urllib.error
 import urllib.request
-import urllib.robotparser
 from urllib.parse import urlencode, urlsplit
 
 from .contracts import FetchError, HttpResponse, RobotsDenied, RateLimited
+from .robots import RobotsRules
 from . import sync_log
 
 
@@ -132,25 +132,20 @@ class HttpClient:
     def _load_robots(self, origin):
         robots_url = origin + "/robots.txt"
         request = urllib.request.Request(robots_url, headers={"User-Agent": self.user_agent})
-        parser = urllib.robotparser.RobotFileParser()
-        parser.set_url(robots_url)
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as error:
             if error.code in (401, 403):
-                parser.parse(["User-agent: *", "Disallow: /"])
-                return parser
+                return RobotsRules.parse(["User-agent: *", "Disallow: /"])
             if 400 <= error.code < 500:
-                parser.parse([])
-                return parser
+                return RobotsRules.parse([])
             raise FetchError("could not fetch {}: HTTP {}".format(
                 robots_url, error.code)) from error
         except urllib.error.URLError as error:
             raise FetchError("could not fetch {}: {}".format(
                 robots_url, error.reason)) from error
-        parser.parse(body.splitlines())
-        return parser
+        return RobotsRules.parse(body.splitlines())
 
 
 class RenderedBrowserSession:

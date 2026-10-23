@@ -62,6 +62,27 @@ class BookClubBarAPITests(unittest.TestCase):
         result=BookClubBarAdapter(Client({0:{'rows':[]}})).crawl(SOURCE,DAY,14,ZONE)
         self.assertEqual(result['source']['state'],'empty_verified')
 
+    def test_ticket_link_is_url_and_room_has_full_address(self):
+        event=row(3);event.update({'date':'20261108','location_text':'Bushwick, 380 Troutman Street',
+            'description':'<p><a href="https://www.eventbrite.com/e/123">Get tickets</a></p>'})
+        result=BookClubBarAdapter(Client({0:{'rows':[row(),event]},2:{'rows':[]}})).crawl(SOURCE,DAY,45,ZONE)
+        plain,ticketed=result['events']
+        self.assertEqual((plain['url'],plain['signup_url']),(SOURCE['url']+'/1',''))
+        self.assertEqual(plain['address'],'197 East 3rd Street, New York, NY')
+        self.assertEqual(ticketed['url'],'https://www.eventbrite.com/e/123')
+        self.assertEqual(ticketed['signup_url'],ticketed['url'])
+        self.assertEqual((ticketed['venue'],ticketed['neighborhood']),('Book Club Bar Bushwick','Bushwick'))
+        self.assertEqual(ticketed['address'],'380 Troutman Street, Brooklyn, NY')
+        # November 8 is after the DST change, so the offset moves to -05:00.
+        self.assertEqual(ticketed['start'],'2026-11-08T18:00:00-05:00')
+
+    def test_all_day_row_is_rejected_without_failing_the_source(self):
+        event=row(2);event.update({'all_day':True,'start_time':'11:00:00','end_time':'00:00:00','location_text':''})
+        result=BookClubBarAdapter(Client({0:{'rows':[row(),event]},2:{'rows':[]}})).crawl(SOURCE,DAY,14,ZONE)
+        self.assertEqual(result['source']['state'],'ok')
+        self.assertEqual(len(result['events']),1)
+        self.assertEqual([r['reason'] for r in result['rejections']],['missing_explicit_time'])
+
     def test_missing_clock_is_not_midnight(self):
         event=row();event['start_time']=''
         result=BookClubBarAdapter(Client({0:{'rows':[event]},1:{'rows':[]}})).crawl(SOURCE,DAY,14,ZONE)
