@@ -113,6 +113,26 @@ Valid source states are:
 - `fetch_failed`
 - `auth_required`
 - `blocked`
+
+### Critical sources
+
+A work row with `critical: true` comes from a source marked `"critical": true`
+in `sources.json`. The operator relies on these sources and must know when one
+is blocked. Do not let a critical source fail silently.
+
+- If a critical source ends in any state other than `ok`, `ok_via_fallback`, or
+  `empty_verified`, run its declared fallback before finalizing. Record the
+  fallback result with `record-source`.
+- If the fallback also fails, stop before finalization. Tell the user which
+  critical source failed, its state and error, and what you tried. Then wait for
+  their decision. Do not pass `--allow-critical-failures` unless the user
+  explicitly approves finalizing without that source.
+- For a critical `empty_verified` result, confirm the empty window on the live
+  page when the adapter is new or the source normally has events.
+- In the final summary, list every critical source whose primary method failed,
+  even when a fallback recovered it. A primary failure means its adapter or API
+  is blocked or broken and needs attention.
+
 ## 3. Finalize
 
 After all planned source rows have final states, finalize the stored run:
@@ -121,7 +141,9 @@ After all planned source rows have final states, finalize the stored run:
 python3 tools/events_store.py finalize-run --run-id RUN_ID
 ```
 
-The command refuses to continue while any source is `pending`. It validates staged candidates, deduplicates events, updates `last_seen` on existing events, computes source counts, and completes the run in one transaction. Finalization does not apply personal ranking criteria.
+The command refuses to continue while any source is `pending`, or while a
+critical source has not recovered (see Critical sources). It prints a note for
+each critical source that needed a fallback. It validates staged candidates, deduplicates events, updates `last_seen` on existing events, computes source counts, and completes the run in one transaction. Finalization does not apply personal ranking criteria.
 
 Finalization checks each candidate in this order:
 

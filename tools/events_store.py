@@ -29,9 +29,10 @@ COMMANDS
                Read one source result from stdin by default and stage it in
                the crawl ledger without merging events.
 
-  finalize-run --run-id ID [--dry-run]
+  finalize-run --run-id ID [--dry-run] [--allow-critical-failures]
                Validate a stored run, deduplicate staged candidates, update
-               events, and mark the run complete.
+               events, and mark the run complete. Refuses while a source with
+               "critical": true is not ok, ok_via_fallback, or empty_verified.
 
   migrate      --events-json FILE [--discoveries FILE]
                One-time import from the legacy JSON store.
@@ -87,6 +88,8 @@ LEGACY_SOURCE_STATES = SOURCE_STATES | {"not_due"}
 RETRY_STATES = {
     "empty_suspicious", "parse_failed", "validation_failed", "fetch_failed",
 }
+# A critical source must end in one of these before its run can finalize.
+RECOVERED_STATES = {"ok", "ok_via_fallback", "empty_verified"}
 SCHEMA_VERSION = 8
 
 VOLATILE_FIELDS = (
@@ -480,6 +483,7 @@ def build_run_plan(catalog, latest_rows, seen, mail_available=False, run_id=None
                 "required_fields": profiles[source["retrieval_profile"]]["required_fields"],
                 "empty_signal": profiles[source["retrieval_profile"]]["empty_signal"],
                 "audit": row["audit"],
+                "critical": source.get("critical") is True,
             })
 
     for source in inbox_items:
@@ -1446,7 +1450,24 @@ def stage_source_result(con, run_id, source_id, payload):
     return len(staged_events), len(staged_rejections)
 
 
-def finalize_database_run(con, run_id):
+def critical_source_states(con, run_id):
+    """Return (source_id, state) for every critical source in one run."""
+    states = []
+    for row in con.execute(
+            "SELECT source_id, state, work_json FROM source_runs "
+            "WHERE run_id=? ORDER BY source_id", (run_id,)):
+        if json.loads(row["work_json"] or "{}").get("critical"):
+            states.append((row["source_id"], row["state"]))
+    return states
+
+
+def critical_source_failures(con, run_id):
+    """Return (source_id, state) for critical sources that did not recover."""
+    return [item for item in critical_source_states(con, run_id)
+            if item[1] not in RECOVERED_STATES]
+
+
+def finalize_database_run(con, run_id, allow_critical_failures=False):
     """Merge all staged candidates and complete one database-backed run."""
     run = con.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     if not run:
@@ -1461,6 +1482,12 @@ def finalize_database_run(con, run_id):
     if pending:
         raise ValueError("run still has pending sources: {}".format(
             ", ".join(pending)))
+    failures = critical_source_failures(con, run_id)
+    if failures and not allow_critical_failures:
+        raise ValueError(
+            "critical sources did not recover: {}. Run their fallback and "
+            "record-source again, or pass --allow-critical-failures.".format(
+                ", ".join("{} ({})".format(*item) for item in failures)))
 
     computed = {}
 
@@ -1653,7 +1680,18 @@ def cmd_finalize_run(args):
     try:
         try:
             con.execute("BEGIN")
-            totals = finalize_database_run(con, args.run_id)
+            # A preview reports critical failures instead of refusing.
+            critical = critical_source_states(con, args.run_id)
+            totals = finalize_database_run(
+                con, args.run_id,
+                allow_critical_failures=args.allow_critical_failures or args.dry_run)
+            for source_id, state in critical:
+                if state not in RECOVERED_STATES:
+                    print("WARNING: critical source {} finalized as {}".format(
+                        source_id, state), file=sys.stderr)
+                elif state == "ok_via_fallback":
+                    print("NOTE: critical source {} needed a fallback; its primary "
+                          "method failed".format(source_id), file=sys.stderr)
             if args.dry_run:
                 con.rollback()
                 print("DRY RUN — nothing written")
@@ -2085,6 +2123,8 @@ def validate_catalog(catalog):
         seen.add(source_id)
         if "enabled" in source and not isinstance(source["enabled"], bool):
             errors.append("{} has non-boolean enabled flag".format(source_id))
+        if "critical" in source and not isinstance(source["critical"], bool):
+            errors.append("{} has non-boolean critical flag".format(source_id))
         if source.get("enabled", True) is False and not source.get("disabled_reason"):
             errors.append("{} is disabled without disabled_reason".format(source_id))
         if "cadence" in source:
@@ -2237,6 +2277,7 @@ def main(argv=None):
     finalize_run = sub.add_parser("finalize-run")
     finalize_run.add_argument("--run-id", required=True)
     finalize_run.add_argument("--dry-run", action="store_true")
+    finalize_run.add_argument("--allow-critical-failures", action="store_true")
     finalize_run.set_defaults(fn=cmd_finalize_run)
 
     migrate = sub.add_parser("migrate")
