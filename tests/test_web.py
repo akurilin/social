@@ -34,7 +34,7 @@ class WebControlCenterTests(unittest.TestCase):
             "# Event Ranking Criteria\n\nOriginal\n", encoding="utf-8")
         (self.root / "EVENT_RANKING_CRITERIA.example.md").write_text(
             "# Event Ranking Criteria\n\nExample\n", encoding="utf-8")
-        skill_dir = self.root / ".agents" / "skills" / "social-crawler"
+        skill_dir = self.root / ".agents" / "skills" / "sync-events"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Crawler skill\n", encoding="utf-8")
         (self.root / "sources.json").write_text(json.dumps({
@@ -784,7 +784,7 @@ class WebControlCenterTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 303)
         self.assertEqual(
-            (self.root / ".agents" / "skills" / "social-crawler" / "SKILL.md")
+            (self.root / ".agents" / "skills" / "sync-events" / "SKILL.md")
             .read_text(encoding="utf-8"),
             "# Crawler skill\n\nUpdated\n",
         )

@@ -14,7 +14,7 @@ Do not read or apply the local criteria during planning, retrieval, factual vali
 |---|---|
 | `EVENT_RANKING_CRITERIA.md` | Local preferences, exclusions, context, field notes, and ranking overrides |
 | `EVENT_RANKING_CRITERIA.example.md` | Version-controlled example for a new local ranking file |
-| `.agents/skills/social-crawler/SKILL.md` | Version-controlled workflow contract for a crawl |
+| `.agents/skills/sync-events/SKILL.md` | Version-controlled workflow contract for a crawl |
 | `sources.json` | Local source catalog, retrieval profiles, source status, and source-specific notes |
 | `sources.example.json` | Version-controlled starting template for a local source catalog |
 | `social.db` | Dynamic runs, source results, discoveries, deduplicated events, and fit assessments |

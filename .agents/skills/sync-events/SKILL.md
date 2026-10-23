@@ -1,6 +1,6 @@
 ---
-name: social-crawler
-description: "Run event crawls from this repository: create a database-backed run for all enabled sources or one targeted source, retrieve with procedural adapters and Codex Desktop fallbacks, record each source result, finalize and deduplicate the run, and rank new events. Use for full crawls, one-source crawl tests, source retries, or crawl-result processing in any configured location."
+name: sync-events
+description: "Sync events: run event crawls from this repository: create a database-backed run for all enabled sources or one targeted source, retrieve with procedural adapters and agent-run browser fallbacks, record each source result, finalize and deduplicate the run, and rank new events. Use for full crawls, one-source crawl tests, source retries, or crawl-result processing in any configured location."
 ---
 
 # Social event crawler
@@ -47,8 +47,8 @@ adapter uses the same database contract as `record-source`. Use
 python3 tools/crawl_source.py --run-id RUN_ID --source-id SOURCE_ID --replace
 ```
 
-Do not also retrieve an adapter source with Codex Desktop unless its work row
-requests an audit or the adapter fails. Codex Desktop must execute rows without
+Do not also retrieve an adapter source yourself unless its work row
+requests an audit or the adapter fails. The agent must execute rows without
 an adapter with the declared browser, Chrome, web, or connector tools.
 
 To resume an active run, load its remaining retrieval instructions:
@@ -60,7 +60,7 @@ python3 tools/events_store.py run-work --run-id RUN_ID
 Add `--mail-available` only when a mail connector is available.
 
 Run `tools/crawl_run.py` again to process procedural adapters that are still
-pending. Then use Codex Desktop for the remaining work rows.
+pending. Then the agent handles the remaining work rows.
 
 A full run has one row for each enabled source. A targeted run has only its selected source. Work only through the returned `work` list. Do not record an unplanned source.
 
@@ -140,7 +140,7 @@ Report these targeted-crawl results from the completed run:
 - `duplicates`: repeated candidates within this crawl
 - `rejected`: candidates not added to the event store
 
-Use the run page to show titles and individual outcomes. Do not describe the planning command as the crawler; Codex Desktop performed the retrieval.
+Use the run page to show titles and individual outcomes. Do not describe the planning command as the crawler; the adapters and the agent performed the retrieval.
 
 ## 4. Assess new events
 

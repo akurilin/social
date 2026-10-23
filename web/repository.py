@@ -84,7 +84,7 @@ class Repository:
             self.root / "EVENT_RANKING_CRITERIA.example.md"
         )
         self.workflow_path = (
-            self.root / ".agents" / "skills" / "social-crawler" / "SKILL.md"
+            self.root / ".agents" / "skills" / "sync-events" / "SKILL.md"
         )
         self.cache_path = (self.root / ".cache").resolve()
         self.calendar_refresh_lock = threading.Lock()

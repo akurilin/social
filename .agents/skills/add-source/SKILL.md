@@ -1,6 +1,6 @@
 ---
 name: add-source
-description: Add or update an event source in the social crawler's sources.json catalog. Use when Codex must investigate a new event source, choose its retrieval profile, add or change its catalog entry through the repository layer, disable it, or validate the source catalog for any configured location.
+description: Add or update an event source in the social crawler's sources.json catalog. Use when the agent must investigate a new event source, choose its retrieval profile, add or change its catalog entry through the repository layer, disable it, or validate the source catalog for any configured location.
 ---
 
 # Add a source to the event crawler catalog

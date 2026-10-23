@@ -71,7 +71,9 @@ Git ignores this file because it contains personal preferences.
 
 ## 3. Add event sources
 
-Use the repository source skill in Codex:
+Use the repository source skill from your coding agent. The skills live in
+`.agents/skills/`, where Codex finds them. Claude Code reads them through the
+`.claude/skills` symlink, so use `/add-source` there instead of `$add-source`:
 
 ```text
 $add-source Add https://example.com/events to the event source catalog.
@@ -80,18 +82,19 @@ $add-source Add https://example.com/events to the event source catalog.
 The skill investigates the source, chooses a retrieval profile, writes the
 entry through the repository layer, and validates `sources.json`.
 
-For a stable source, ask Codex to create a procedural adapter with fixture
+For a stable source, ask the agent to create a procedural adapter with fixture
 tests, register it in `crawler/registry.py`, and add its adapter ID to the source
 entry. Keep the retrieval profile because it defines the independent audit and
 fallback method. A source without an adapter can still run through its declared
-Codex Desktop retrieval method.
+agent retrieval method.
 
 ## 4. Run a full sync
 
-From a Codex task rooted in this repository, invoke the crawler skill:
+From an agent task rooted in this repository, invoke the sync skill. In Claude
+Code, use `/sync-events` instead of `$sync-events`:
 
 ```text
-$social-crawler Run a full crawl for today. Complete all sources, finalize
+$sync-events Run a full crawl for today. Complete all sources, finalize
 the run, rank all new events, and report the final counts.
 ```
 
@@ -99,8 +102,8 @@ The skill performs the complete sync:
 
 1. It creates a database-backed run for every enabled source.
 2. It retrieves procedural sources in a bounded parallel batch. One coordinator
-   writes their results to SQLite in stable source order. It uses Codex Desktop
-   only for declared audits, fallbacks, or sources without adapters.
+   writes their results to SQLite in stable source order. The agent works
+   directly only on declared audits, fallbacks, or sources without adapters.
 3. It validates, stores, and deduplicates the factual events.
 4. It reads `EVENT_RANKING_CRITERIA.md` and ranks new events as super, high, medium,
    low, or ineligible.
@@ -109,7 +112,7 @@ The skill performs the complete sync:
 If a run stops before completion, invoke the same skill again:
 
 ```text
-$social-crawler Resume the active crawl and complete finalization and ranking.
+$sync-events Resume the active crawl and complete finalization and ranking.
 ```
 
 `python3 tools/events_store.py plan-run` only creates a run plan. It does not

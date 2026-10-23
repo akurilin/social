@@ -36,8 +36,8 @@ class FilterPreferencesBrowserTests(unittest.TestCase):
         (cls.root / ".cache").mkdir()
         (cls.root / "EVENT_RANKING_CRITERIA.example.md").write_text(
             "# Example\n", encoding="utf-8")
-        (cls.root / ".agents/skills/social-crawler").mkdir(parents=True)
-        (cls.root / ".agents/skills/social-crawler/SKILL.md").write_text(
+        (cls.root / ".agents/skills/sync-events").mkdir(parents=True)
+        (cls.root / ".agents/skills/sync-events/SKILL.md").write_text(
             "# Test\n", encoding="utf-8")
         catalog = {
             "retrieval_profiles": {},
