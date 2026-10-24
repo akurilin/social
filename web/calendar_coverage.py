@@ -217,20 +217,33 @@ def coverage_view(snapshot, today):
 
 
 def build_calendar_reader(cache_path):
+    return build_native_tool(
+        cache_path, "calendar-reader", "calendar_reader.swift",
+        "CalendarReader-Info.plist", "Calendar reader")
+
+
+def build_web_launcher(cache_path):
+    # macOS credits calendar access to this launcher when launchd starts the server.
+    return build_native_tool(
+        cache_path, "social-web", "web_launcher.swift",
+        "WebLauncher-Info.plist", "Web launcher")
+
+
+def build_native_tool(cache_path, name, source_name, info_name, label):
     # Keep one binary path so macOS can keep its calendar permission.
-    source = NATIVE_ROOT / "calendar_reader.swift"
-    info = NATIVE_ROOT / "CalendarReader-Info.plist"
+    source = NATIVE_ROOT / source_name
+    info = NATIVE_ROOT / info_name
     digest = hashlib.sha256(source.read_bytes() + info.read_bytes()).hexdigest()
-    build_dir = cache_path / "calendar-reader"
-    binary = build_dir / "calendar-reader"
+    build_dir = cache_path / name
+    binary = build_dir / name
     stamp = build_dir / "source.sha256"
     if binary.is_file() and stamp.is_file() and stamp.read_text() == digest:
         return binary
     compiler = shutil.which("swiftc")
     if not compiler:
-        raise CalendarCoverageError("Calendar reader needs Apple Command Line Tools.")
+        raise CalendarCoverageError("{} needs Apple Command Line Tools.".format(label))
     build_dir.mkdir(parents=True, exist_ok=True)
-    pending = build_dir / "calendar-reader.build"
+    pending = build_dir / "{}.build".format(name)
     try:
         run_command(
             [compiler, "-parse-as-library", str(source), "-o", str(pending),
@@ -241,7 +254,7 @@ def build_calendar_reader(cache_path):
         stamp.write_text(digest)
     except (OSError, subprocess.SubprocessError) as error:
         raise CalendarCoverageError(
-            "Calendar reader could not start. Check Apple Command Line Tools.") from error
+            "{} could not start. Check Apple Command Line Tools.".format(label)) from error
     return binary
 
 

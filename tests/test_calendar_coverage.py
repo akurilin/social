@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import plistlib
 import subprocess
 import tempfile
 import threading
@@ -15,8 +16,8 @@ from fastapi.testclient import TestClient
 from web.app import app
 from web.repository import Repository
 from web.calendar_coverage import (
-    COVERAGE_DAYS, MODEL, CalendarCoverageError, classify_events,
-    coverage_days, read_apple_calendar, refresh_coverage,
+    COVERAGE_DAYS, MODEL, NATIVE_ROOT, CalendarCoverageError, build_web_launcher,
+    classify_events, coverage_days, read_apple_calendar, refresh_coverage,
 )
 
 
@@ -302,6 +303,39 @@ class CalendarCoverageTests(unittest.TestCase):
         from web.repository import events_store
         events_store.migrate_database(self.repo.db_path)
         self.assertIsNone(self.repo.load_calendar_coverage())
+
+
+class WebLauncherBuildTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.cache = Path(self.temp.name)
+
+    def compile(self, command, **kwargs):
+        Path(command[command.index("-o") + 1]).write_text("binary")
+
+    def test_launcher_embeds_its_info_and_reuses_unchanged_build(self):
+        with patch("web.calendar_coverage.shutil.which", return_value="swiftc"), patch(
+                "web.calendar_coverage.run_command", side_effect=self.compile) as compile_mock:
+            first = build_web_launcher(self.cache)
+            second = build_web_launcher(self.cache)
+        self.assertEqual(first, self.cache / "social-web" / "social-web")
+        self.assertEqual(second, first)
+        self.assertEqual(compile_mock.call_count, 1)
+        command = compile_mock.call_args.args[0]
+        self.assertIn(str(NATIVE_ROOT / "web_launcher.swift"), command)
+        self.assertIn(str(NATIVE_ROOT / "WebLauncher-Info.plist"), command)
+
+    def test_missing_compiler_names_the_launcher(self):
+        with patch("web.calendar_coverage.shutil.which", return_value=None):
+            with self.assertRaisesRegex(CalendarCoverageError, "Web launcher"):
+                build_web_launcher(self.cache)
+
+    def test_launcher_has_own_identity_and_calendar_purpose(self):
+        reader = plistlib.loads((NATIVE_ROOT / "CalendarReader-Info.plist").read_bytes())
+        launcher = plistlib.loads((NATIVE_ROOT / "WebLauncher-Info.plist").read_bytes())
+        self.assertNotEqual(launcher["CFBundleIdentifier"], reader["CFBundleIdentifier"])
+        self.assertTrue(launcher["NSCalendarsFullAccessUsageDescription"])
 
 
 class CalendarCoveragePageTests(unittest.TestCase):

@@ -17,6 +17,7 @@ usage: python3 social.py <command>
 commands:
   web    start the local web control center (installs deps if missing)
   calendars  list writable Apple Calendars for .env setup
+  web-launcher  build the launcher that runs `web` from launchd with calendar access
   migrate  apply pending social.db schema migrations
   db-status  show the current and required database schema versions
   test   run all validation: catalog-check on sources.json, then the test suite
@@ -69,6 +70,22 @@ def cmd_calendars():
         print(calendar["selector"])
 
 
+def cmd_web_launcher():
+    from web.calendar_coverage import CalendarCoverageError, build_web_launcher
+
+    try:
+        launcher = build_web_launcher(ROOT / ".cache")
+    except CalendarCoverageError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
+    python = ROOT / ".venv" / "bin" / "python"
+    if not python.exists():
+        python = Path(sys.executable)
+    # These are the launch agent's ProgramArguments, one per line.
+    for argument in (launcher, python, ROOT / "social.py", "web"):
+        print(argument)
+
+
 def run_store_command(command):
     result = subprocess.run(
         [sys.executable, "tools/events_store.py", command], cwd=ROOT)
@@ -103,6 +120,8 @@ def main(argv):
         cmd_web()
     elif command == "calendars":
         cmd_calendars()
+    elif command == "web-launcher":
+        cmd_web_launcher()
     elif command == "migrate":
         run_store_command("migrate-db")
     elif command == "db-status":

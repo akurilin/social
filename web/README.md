@@ -52,7 +52,19 @@ scan. Removing it clears that confirmation; other plans on the day still count.
 Calendar access needs macOS, Apple Command Line Tools (`xcode-select --install`),
 and calendar permission. The reader compiles on the first refresh. If access
 is denied, allow the reader or its launcher in System Settings > Privacy &
-Security > Calendars. Install and sign in to at least one supported client:
+Security > Calendars.
+
+macOS gives calendar access to the program that started the server. From a
+terminal, that is the terminal app. To run the server in the background with
+launchd, use the web launcher so macOS asks for this server only, not for
+every Python program. Run `.venv/bin/python social.py web-launcher`. It builds
+`.cache/social-web/social-web` and prints the four `ProgramArguments` for your
+launch agent. On its first start the launcher asks for calendar access; choose
+**Allow**. A change to the launcher source rebuilds it, and macOS asks again.
+
+Install and sign in to at least one supported client:
+
+
 
 - Codex CLI: `codex exec --model gpt-5.6-luna` is the first choice.
   Use `codex login status` to check its sign-in method.
