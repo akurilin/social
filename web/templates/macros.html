@@ -27,11 +27,14 @@
         <button type="button" data-source-select-all>Select all</button>
         <button type="button" data-source-clear-all>Clear all</button>
       </div>
+      <input type="search" class="source-filter-search" data-source-search placeholder="Find sources by name or ID" aria-label="Find sources by name or ID" autocomplete="off">
       <div class="source-filter-options">
       {% for value, label in source_options %}
         <label><input type="checkbox" name="source_id" value="{{ value }}" {% if value in selected_source_ids %}checked{% endif %}><span><strong>{{ label }}</strong><small>{{ value }}</small></span></label>
       {% endfor %}
       </div>
+      <p class="source-filter-empty" data-source-no-results hidden>No matching sources</p>
+      <div class="source-filter-footer"><button type="button" data-source-apply>Apply sources</button></div>
     </div>
   </details>
 {%- endmacro %}

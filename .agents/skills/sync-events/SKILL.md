@@ -204,9 +204,41 @@ Keep both in the event store, and explain the conflict in `fit_note` or `catch`.
 A fit decision must not change retrieval results, ingestion counts, or rejection
 records.
 
+## 5. Report coverage and issues
+
+Before the final reply, read the completed run with
+`web.repository.Repository.get_run(RUN_ID)` or
+`events_store.load_source_runs(RUN_ID)`. Use
+`python3 tools/events_store.py source-stats --json` for each source's latest
+check. Use `Repository.get_source(SOURCE_ID)["history"]` when a source fails
+and you need its last successful check. Read these records; never hand-edit the
+database.
+
+For a full sync, compare the enabled source IDs in `sources.json` with the run
+manifest and final source rows. Count checked, verified empty, failed, and
+blocked sources. A missing or pending enabled source is a coverage gap; do not
+call the sync complete. Compare the current manifest with the previous
+completed full run. Name sources that disappeared because they were disabled
+or removed, and state that they were not checked. For a targeted sync, report
+only the selected source and do not imply full catalog coverage.
+
+Review failed and blocked sources, state changes, and repeated verified zeros
+for sources that normally have events. For each source that needs attention,
+give its name, current state, last successful check date (or say none was found
+in recent history), coverage lost, and the action needed. Include critical
+sources whose primary method failed even when a fallback recovered them.
+Distinguish a verified empty calendar from a failed check. Do not hide a
+partial source behind a successful run total.
+
+End every sync with two or three short paragraphs: (1) run window, source
+coverage, and new/existing/duplicate/rejected counts; (2) ranking result and
+any source that stopped being checked; (3) unresolved failures and items that
+need human action. If none need action, say so. Keep detailed rows in the web
+control center; do not create a separate report.
+
 ## Safety
 
 - Do not RSVP, buy, join, submit forms, or enter credentials for the operator.
 - Do not bypass bot protection or send excessive requests. Record blocked or failed results.
 
-Use the web control center as the user-facing result. Give a concise count summary in the task response, but do not create a separate report.
+Use the web control center for detailed results.

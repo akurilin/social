@@ -145,11 +145,13 @@ class FilterPreferencesBrowserTests(unittest.TestCase):
         self.page.wait_for_url("**rank=super**")
         self.page.locator("[data-source-filter] summary").click()
         self.page.locator("[data-source-clear-all]").click()
+        self.page.locator("[data-source-apply]").click()
         self.page.wait_for_url("**sources_filtered=1**")
         self.assertEqual([], self.checked_sources())
         self.page.locator("[data-source-filter] summary").click()
         self.page.locator(
             'form.event-filters [name="source_id"][value="source-two"]').check()
+        self.page.locator("[data-source-apply]").click()
         self.page.wait_for_url("**source_id=source-two**")
         self.assertEqual(["source-two"], self.checked_sources())
 
@@ -166,6 +168,7 @@ class FilterPreferencesBrowserTests(unittest.TestCase):
         # Select all sources to check the canonical unfiltered state.
         self.page.locator("[data-source-filter] summary").click()
         self.page.locator("[data-source-select-all]").click()
+        self.page.locator("[data-source-apply]").click()
         self.assertEqual({"source-one", "source-two"}, set(self.checked_sources()))
 
         # A bare load restores the full saved state, including all sources.
@@ -189,6 +192,34 @@ class FilterPreferencesBrowserTests(unittest.TestCase):
         self.assertEqual("Dinner", self.page.locator('form.event-filters [name="q"]').input_value())
         self.assertEqual("super", self.page.locator('form.event-filters [name="rank"]').input_value())
         self.assertEqual({"source-one", "source-two"}, set(self.checked_sources()))
+
+    def test_source_search_and_panel_stay_in_view(self):
+        for path, width in (("/events", 1200), ("/calendar", 390)):
+            with self.subTest(path=path, width=width):
+                self.page.set_viewport_size({"width": width, "height": 900})
+                self.open(path)
+                self.page.locator("[data-source-filter] summary").click()
+                bounds = self.page.locator(".source-filter-panel").bounding_box()
+                self.assertGreaterEqual(bounds["x"], 0)
+                self.assertLessEqual(bounds["x"] + bounds["width"], width)
+
+                search = self.page.locator("[data-source-search]")
+                search.fill("two source")
+                self.assertEqual(1, self.page.locator(
+                    ".source-filter-options label:visible").count())
+                self.assertEqual("Select shown", self.page.locator(
+                    "[data-source-select-all]").inner_text())
+                self.page.locator("[data-source-clear-all]").click()
+                self.assertEqual(["source-one"], self.checked_sources())
+                search.fill("no match")
+                self.assertTrue(self.page.locator(
+                    "[data-source-no-results]").is_visible())
+                search.fill("two source")
+                self.page.locator("[data-source-select-all]").click()
+                self.assertEqual({"source-one", "source-two"},
+                                 set(self.checked_sources()))
+                self.page.locator("[data-source-apply]").click()
+                self.page.wait_for_load_state("networkidle")
 
     def test_explicit_query_replaces_saved_state_and_reset_clears_only_current_page(self):
         self.open("/events?q=Dinner&rank=super&period=all&period=upcoming&sort=title&dir=desc")

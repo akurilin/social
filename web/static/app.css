@@ -149,14 +149,20 @@ label small, .help { display: block; margin-top: 6px; color: var(--muted); font-
 .source-filter-actions > span { margin-right: auto; color: var(--muted); font: 700 9px/1.2 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
 .source-filter-actions button { padding: 4px 7px; border: 0; background: transparent; color: var(--accent-dark); cursor: pointer; font-size: 10px; font-weight: 700; }
 .source-filter-actions button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.source-filter-search { margin-bottom: 10px; }
 .source-filter-options { display: grid; max-height: 340px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; overflow-y: auto; }
 .filter-bar .source-filter-options label, .calendar-filters .source-filter-options label { display: flex; min-width: 0; align-items: flex-start; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.source-filter-options label[hidden] { display: none; }
 .source-filter-options label:hover { background: var(--surface-2); }
 .source-filter-options input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--accent); }
 .source-filter-options label > span { min-width: 0; margin: 0; color: inherit; font: inherit; letter-spacing: normal; text-transform: none; }
 .source-filter-options strong, .source-filter-options small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-filter-options strong { font-size: 11px; line-height: 1.25; }
 .source-filter-options small { margin-top: 2px; color: var(--muted); font: 9px/1.2 var(--mono); }
+.source-filter-empty { margin: 10px 0; color: var(--muted); font-size: 11px; }
+.source-filter-footer { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.source-filter-footer button { width: auto; height: 34px; padding: 0 13px; border: 0; border-radius: 6px; background: var(--accent); color: white; cursor: pointer; font-size: 11px; font-weight: 700; }
+.source-filter-footer button:hover { background: var(--accent-dark); }
 
 .table-panel { overflow: hidden; }
 .table-summary { padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }

@@ -185,7 +185,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const submit = () => form.requestSubmit();
 
     form.addEventListener("change", (event) => {
-      if (event.target.matches("select, input[type='checkbox'], input[type='radio']")) {
+      if (event.target.matches("select, input[type='checkbox'], input[type='radio']")
+          && !event.target.matches('input[name="source_id"]')) {
         submit();
       }
     });
@@ -203,33 +204,73 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.querySelectorAll("[data-source-filter]").forEach((filter) => {
+    const SOURCE_PANEL_EDGE_GAP = 15;
     const form = filter.closest("form");
+    const panel = filter.querySelector(".source-filter-panel");
     const boxes = Array.from(filter.querySelectorAll('input[name="source_id"]'));
     const marker = filter.querySelector("[data-source-filter-marker]");
     const summary = filter.querySelector("[data-source-summary]");
+    const search = filter.querySelector("[data-source-search]");
+    const selectAll = filter.querySelector("[data-source-select-all]");
+    const clearAll = filter.querySelector("[data-source-clear-all]");
+    const noResults = filter.querySelector("[data-source-no-results]");
+    const normalize = (value) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const visibleBoxes = () => boxes.filter((box) => !box.closest("label").hidden);
     const syncSummary = () => {
       const selected = boxes.filter((box) => box.checked).length;
       if (selected === boxes.length) summary.textContent = "All sources";
       else if (selected === 0) summary.textContent = "No sources";
       else summary.textContent = `${selected} of ${boxes.length} sources`;
     };
+    const filterOptions = () => {
+      const words = normalize(search.value.trim()).split(/\s+/).filter(Boolean);
+      boxes.forEach((box) => {
+        const label = box.closest("label");
+        const text = normalize(label.textContent);
+        label.hidden = !words.every((word) => text.includes(word));
+      });
+      noResults.hidden = visibleBoxes().length !== 0;
+      selectAll.textContent = words.length ? "Select shown" : "Select all";
+      clearAll.textContent = words.length ? "Clear shown" : "Clear all";
+    };
+    const positionPanel = () => {
+      if (!filter.open) return;
+      panel.style.transform = "";
+      const bounds = panel.getBoundingClientRect();
+      // Move the wide panel into view when its picker is close to a screen edge.
+      const leftShift = SOURCE_PANEL_EDGE_GAP - bounds.left;
+      const rightShift = window.innerWidth - SOURCE_PANEL_EDGE_GAP - bounds.right;
+      const shift = leftShift > 0 ? leftShift : Math.min(0, rightShift);
+      panel.style.transform = `translateX(${shift}px)`;
+    };
     const setAll = (checked) => {
-      boxes.forEach((box) => { box.checked = checked; });
+      visibleBoxes().forEach((box) => { box.checked = checked; });
       syncSummary();
-      form?.requestSubmit();
     };
 
     boxes.forEach((box) => box.addEventListener("change", syncSummary));
-    filter.querySelector("[data-source-select-all]")?.addEventListener(
-      "click", () => setAll(true));
-    filter.querySelector("[data-source-clear-all]")?.addEventListener(
-      "click", () => setAll(false));
+    search.addEventListener("input", filterOptions);
+    search.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") event.preventDefault();
+    });
+    selectAll.addEventListener("click", () => setAll(true));
+    clearAll.addEventListener("click", () => setAll(false));
+    filter.querySelector("[data-source-apply]").addEventListener(
+      "click", () => form?.requestSubmit());
+    filter.addEventListener("toggle", () => {
+      if (filter.open) {
+        positionPanel();
+        search.focus();
+      }
+    });
+    window.addEventListener("resize", positionPanel);
     form?.addEventListener("submit", () => {
       if (boxes.length && boxes.every((box) => box.checked)) {
         if (marker) marker.disabled = true;
         boxes.forEach((box) => { box.disabled = true; });
       }
     });
+    filterOptions();
     syncSummary();
   });
 
