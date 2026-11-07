@@ -118,6 +118,36 @@ $sync-events Resume the active crawl and complete finalization and ranking.
 `python3 tools/events_store.py plan-run` only creates a run plan. It does not
 perform a sync by itself.
 
+### Daily sync on macOS
+
+Install the user launch agent once:
+
+```sh
+.venv/bin/python tools/daily_sync.py --install
+```
+
+The agent checks each hour. It starts one full sync at 8 a.m. Eastern, or at
+the next check after a missed start. An unfinished sync resumes on the next
+hour. It skips the rest of the day after a full run is finalized and ranked.
+The Mac must be on and the user must be logged in for a launch agent to run.
+
+The job uses signed-in Codex CLI and Python Playwright. Codex Desktop is not
+needed. Headless Chromium cannot start in the Codex workspace sandbox on this
+Mac, so this job runs Codex with full local access. It loads repository
+instructions and the sync skill, but not the user's Codex plugin settings.
+
+The job sends a macOS notification after a new success or failure. Set the
+sending app's notification style to **Persistent** in System Settings if you
+want it to remain until you dismiss it. Check the saved run in the web control
+center; the notice also names any source issues. For local checks and logs:
+
+```sh
+.venv/bin/python tools/daily_sync.py --check
+.venv/bin/python tools/daily_sync.py --notify-test
+launchctl print gui/$(id -u)/local.social.daily-sync
+tail -f ~/Library/Logs/SocialCrawler/daily-sync.log
+```
+
 The skill runs this command after it creates the plan:
 
 ```sh
