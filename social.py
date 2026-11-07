@@ -18,6 +18,7 @@ commands:
   web    start the local web control center (installs deps if missing)
   calendars  list writable Apple Calendars for .env setup
   web-launcher  build the launcher that runs `web` from launchd with calendar access
+  mcp    serve read-only event tools to agents over MCP on 127.0.0.1:8767
   migrate  apply pending social.db schema migrations
   db-status  show the current and required database schema versions
   test   run all validation: catalog-check on sources.json, then the test suite
@@ -86,6 +87,13 @@ def cmd_web_launcher():
         print(argument)
 
 
+def cmd_mcp():
+    # Standard library only, so it needs no dependency install.
+    from mcp_server.server import serve
+
+    serve()
+
+
 def run_store_command(command):
     result = subprocess.run(
         [sys.executable, "tools/events_store.py", command], cwd=ROOT)
@@ -122,6 +130,8 @@ def main(argv):
         cmd_calendars()
     elif command == "web-launcher":
         cmd_web_launcher()
+    elif command == "mcp":
+        cmd_mcp()
     elif command == "migrate":
         run_store_command("migrate-db")
     elif command == "db-status":

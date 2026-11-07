@@ -167,6 +167,47 @@ deduplicated events, fit assessments, and the event calendar.
 The web app reads `social.db`. It does not start a sync. Run the crawler skill,
 then refresh the web app to see the completed results.
 
+## 6. Let agents read events (MCP)
+
+`python3 social.py mcp` serves a read-only MCP server at
+`http://127.0.0.1:8767/mcp` (set `SOCIAL_MCP_PORT` to change the port). It
+uses only the Python standard library and reads `social.db` through the web
+repository layer. Its two tools are `search_events` (events in a date range
+with rank, fit note, catch and capacity) and `get_event` (full description and
+links). It exposes no calendar data, because agents read the calendar
+directly and a copy here would go stale. Agents get the rest of the usage
+guidance from the server itself when they connect. The server never writes to
+the database.
+
+Check a running server with:
+
+```sh
+python3 -m mcp_server.smoke [URL]
+```
+
+To keep it running, add a LaunchAgent like the web app's, at
+`~/Library/LaunchAgents/local.social.mcp.plist`, with the label
+`local.social.mcp`, `KeepAlive` and `RunAtLoad` set to true,
+`WorkingDirectory` set to the repository, and `ProgramArguments` set to
+`<repo>/.venv/bin/python <repo>/social.py mcp`. Load it with
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.social.mcp.plist`.
+It needs no calendar permission, so it skips the web launcher.
+
+Cloud agents reach it over Tailscale. Publish it on the tailnet under a path,
+next to anything else you already serve:
+
+```sh
+tailscale serve --bg --set-path /social http://127.0.0.1:8767
+```
+
+Agents then POST JSON-RPC to `https://<mac>.<tailnet>.ts.net/social/mcp`.
+The server ignores the request path, so it works whether or not
+`tailscale serve` strips the `/social` prefix. If your tailnet policy already
+lets tagged agents reach port 443 on this Mac (for example for msgmcp),
+agents need no other change. The server requires no token, so any device that
+can reach that port can read events and fit notes. Use `serve`, never
+`funnel`: Funnel publishes to the internet.
+
 ## Validate repository changes
 
 ```sh
