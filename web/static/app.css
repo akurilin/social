@@ -201,8 +201,20 @@ td small { display: block; max-width: 240px; overflow: hidden; margin-top: 4px; 
 .event-list-link:hover { border-color: var(--accent); background: var(--accent-soft); }
 .event-calendar-column, .event-calendar-cell { width: 1%; text-align: center; white-space: nowrap; }
 .event-calendar-cell [hidden] { display: none; }
-.calendar-add-button { min-width: 48px; }
-.calendar-add-button:disabled { border-color: var(--line); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+.calendar-add-button { min-width: 52px; gap: 5px; border-color: var(--blue); background: var(--blue); color: white; }
+/* Reserve space for the warning icon in both table buttons. */
+.calendar-add-button.tiny { width: 60px; }
+.calendar-add-button:hover { border-color: #24485d; background: #24485d; }
+.calendar-add-button:disabled, .calendar-add-button:disabled:hover { border-color: var(--line); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+.calendar-warning-icon { display: inline-grid; width: 1.2em; height: 1.2em; place-items: center; border: 1px solid currentColor; border-radius: 50%; line-height: 1; }
+.calendar-warning-icon[hidden] { display: none; }
+/* Use the top layer so the scrollable table does not clip the warning. */
+.calendar-add-tooltip {
+  position: fixed; inset: auto; margin: 0; width: max-content; max-width: min(320px, calc(100vw - 16px));
+  max-height: 50vh; overflow: auto; padding: 8px 11px; border: 1px solid #b58a25; border-radius: 7px;
+  background: #fff7dc; color: #3d2b08; font-size: 12px; line-height: 1.5; text-align: left;
+  white-space: pre-line; overflow-wrap: anywhere; box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
+}
 .calendar-added { display: block; color: var(--accent-dark); font-size: 11px; font-weight: 700; }
 .calendar-remove-button { border: 0; background: none; color: var(--danger); cursor: pointer; font-size: 11px; text-decoration: underline; }
 .calendar-remove-button:disabled { color: var(--muted); cursor: not-allowed; }

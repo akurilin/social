@@ -295,15 +295,88 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  const allowCalendarOverlap = "1";
+  const setCalendarOverlap = (button, message, confirmed = Boolean(message)) => {
+    const tooltip = button.nextElementSibling;
+    button.classList.toggle("calendar-add-warning", Boolean(message));
+    button.querySelector(".calendar-warning-icon").hidden = !message;
+    tooltip.textContent = message;
+    if (message) {
+      button.setAttribute("aria-describedby", tooltip.id);
+    } else {
+      button.removeAttribute("aria-describedby");
+      tooltip.hidePopover?.();
+    }
+    if (confirmed) {
+      button.name = "allow_overlap";
+      button.value = allowCalendarOverlap;
+    } else {
+      button.removeAttribute("name");
+    }
+    if (!tooltip.showPopover) button.title = message;
+  };
+  document.querySelectorAll(".calendar-add-button").forEach((button) => {
+    const tooltip = button.nextElementSibling;
+    const endInput = button.form.querySelector("input[name='end']");
+    endInput?.addEventListener("input", () => {
+      // A new end time needs a new confirmation.
+      if (button.name === "allow_overlap") setCalendarOverlap(button, "");
+    });
+    if (!tooltip.showPopover) {
+      tooltip.hidden = true;
+      if (tooltip.textContent) button.title = tooltip.textContent;
+      return;
+    }
+    let closeTimer;
+    const show = () => {
+      clearTimeout(closeTimer);
+      if (!tooltip.textContent || button.disabled) return;
+      tooltip.showPopover();
+      const { left, top, bottom } = button.getBoundingClientRect();
+      const { width, height } = tooltip.getBoundingClientRect();
+      const edge = 8;
+      tooltip.style.left = `${Math.max(edge, Math.min(left, document.documentElement.clientWidth - width - edge))}px`;
+      tooltip.style.top = `${bottom + height > window.innerHeight && top >= height ? top - height : bottom}px`;
+    };
+    const hide = () => tooltip.hidePopover();
+    const deferHide = () => {
+      // Let the pointer move from the button to the tooltip.
+      closeTimer = setTimeout(() => {
+        if (!button.matches(":hover, :focus-visible") && !tooltip.matches(":hover")) hide();
+      }, 120);
+    };
+    button.addEventListener("pointerenter", show);
+    button.addEventListener("pointerleave", deferHide);
+    button.addEventListener("focus", show);
+    button.addEventListener("blur", deferHide);
+    tooltip.addEventListener("pointerleave", deferHide);
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && tooltip.matches(":popover-open")) {
+        event.preventDefault();
+        hide();
+      }
+    });
+    if (document.activeElement === button) show();
+  });
+
   const calendarEndDialog = document.querySelector("[data-calendar-end-dialog]");
   const calendarListStatus = document.querySelector("[data-calendar-list-status]");
+  const calendarEndButton = calendarEndDialog?.querySelector(".calendar-add-button");
+  const calendarEndStatus = calendarEndDialog?.querySelector("[data-calendar-end-status]");
   let pendingCalendarForm = null;
-  const saveCalendarForm = async (form, end = "") => {
-    const button = form.querySelector("button[type='submit']");
+  const saveCalendarForm = async (form, button, end = "") => {
+    if (button.disabled) return;
+    const label = button.querySelector("[data-calendar-add-label]");
+    const originalLabel = label.textContent;
+    const message = end ? calendarEndStatus : calendarListStatus;
+    const endInput = end ? calendarEndDialog.querySelector("input[name='end']") : null;
+    if (endInput) endInput.readOnly = true;
+    button.nextElementSibling.hidePopover?.();
     button.disabled = true;
-    button.textContent = "Saving…";
+    label.textContent = "Saving…";
     const body = new URLSearchParams(new FormData(form));
     if (end) body.set("end", end);
+    if (button.name === "allow_overlap") body.set(button.name, button.value);
     try {
       const response = await fetch(form.action, {
         method: "POST",
@@ -311,19 +384,22 @@ document.addEventListener("DOMContentLoaded", () => {
         body,
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail || "Calendar save failed.");
-      if (result.coverage) renderCoverage(result.coverage);
-      const cell = form.closest("td");
-      form.hidden = true;
-      cell.querySelector("[data-calendar-added]").hidden = false;
-      cell.querySelector("[data-calendar-remove]").hidden = false;
-      if (calendarListStatus) calendarListStatus.textContent = result.state === "saved"
-        ? "Saved in Apple Calendar. Check the linked account for sync."
-        : "This event is already in the selected calendar.";
+      if (!response.ok) {
+        if (result.overlap) setCalendarOverlap(button, result.overlap);
+        throw new Error(result.detail || "Calendar save failed.");
+      }
+      // A save can also change the warnings on other rows.
+      window.location.reload();
+      return;
     } catch (error) {
+      if (endInput) endInput.readOnly = false;
       button.disabled = false;
-      button.textContent = "Add";
-      if (calendarListStatus) calendarListStatus.textContent = error.message;
+      label.textContent = originalLabel;
+      if (message) {
+        message.textContent = error.message;
+        message.hidden = false;
+      }
+      button.focus();
     }
   };
   document.querySelectorAll("form[data-calendar-add]").forEach((form) => {
@@ -334,9 +410,12 @@ document.addEventListener("DOMContentLoaded", () => {
         calendarEndDialog.querySelector("[data-calendar-end-event]").textContent =
           `${form.dataset.eventTitle} · Starts ${form.dataset.eventStart.replace("T", " ")}`;
         calendarEndDialog.querySelector("input[name='end']").value = "";
+        const overlap = form.querySelector(".calendar-add-tooltip").textContent;
+        setCalendarOverlap(calendarEndButton, overlap, false);
+        calendarEndStatus.hidden = true;
         calendarEndDialog.showModal();
       } else {
-        saveCalendarForm(form);
+        saveCalendarForm(form, form.querySelector(".calendar-add-button"));
       }
     });
   });
@@ -355,14 +434,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || "Calendar removal failed.");
-        if (result.coverage) renderCoverage(result.coverage);
-        const cell = form.closest("td");
-        form.hidden = true;
-        cell.querySelector("[data-calendar-added]").hidden = true;
-        cell.querySelector("[data-calendar-add]").hidden = false;
-        if (calendarListStatus) calendarListStatus.textContent = result.state === "removed"
-          ? "Removed from the selected Apple calendar."
-          : "This event is no longer in the selected Apple calendar.";
+        window.location.reload();
       } catch (error) {
         if (calendarListStatus) calendarListStatus.textContent = error.message;
       } finally {
@@ -383,12 +455,13 @@ document.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       if (!pendingCalendarForm) return;
       const end = calendarEndDialog.querySelector("input[name='end']").value;
-      const form = pendingCalendarForm;
-      calendarEndDialog.close();
-      saveCalendarForm(form, end);
+      saveCalendarForm(pendingCalendarForm, calendarEndButton, end);
     });
     calendarEndDialog.querySelector("[data-calendar-end-cancel]").addEventListener(
-      "click", () => calendarEndDialog.close());
+      "click", () => { if (!calendarEndButton.disabled) calendarEndDialog.close(); });
+    calendarEndDialog.addEventListener("cancel", (event) => {
+      if (calendarEndButton.disabled) event.preventDefault();
+    });
     calendarEndDialog.addEventListener("close", () => { pendingCalendarForm = null; });
   }
 });

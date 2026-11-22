@@ -12,6 +12,7 @@ struct CalendarReader {
         let id: String
         let title: String
         let start: Date
+        let end: Date?
         let url: String
     }
 
@@ -71,11 +72,8 @@ struct CalendarReader {
             let formatter = ISO8601DateFormatter()
             formatter.timeZone = .current
             // EventKit expands recurring events; skip cancelled or declined occurrences.
-            let events = store.events(matching: predicate).filter { event in
-                event.status != .canceled && !(event.attendees ?? []).contains {
-                    $0.isCurrentUser && $0.participantStatus == .declined
-                }
-            }.sorted { $0.startDate < $1.startDate }
+            let events = store.events(matching: predicate).filter(isAttending)
+                .sorted { $0.startDate < $1.startDate }
             let rows: [[String: Any]] = events.enumerated().map { index, event in
                 ["id": index, "title": event.title ?? "",
                  "start": formatter.string(from: event.startDate),
@@ -176,6 +174,33 @@ struct CalendarReader {
         return sameTitle || sameURL
     }
 
+    static func isAttending(_ event: EKEvent) -> Bool {
+        event.status != .canceled && !(event.attendees ?? []).contains {
+            $0.isCurrentUser && $0.participantStatus == .declined
+        }
+    }
+
+    static func overlaps(_ event: EKEvent, candidate: Candidate) -> Bool {
+        // With no end time, check whether the start is already booked.
+        if let end = candidate.end, end > candidate.start {
+            return event.startDate < end && candidate.start < event.endDate
+        }
+        return event.startDate <= candidate.start && candidate.start < event.endDate
+    }
+
+    static func conflicts(_ events: [EKEvent], candidate: Candidate) -> [[String: Any]] {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = .current
+        return events.filter { event in
+            // Ignore free time and all-day entries with no availability, such as birthdays.
+            overlaps(event, candidate: candidate) && event.availability != .free
+                && !(event.isAllDay && event.availability == .notSupported) && isAttending(event)
+        }.sorted { $0.startDate < $1.startDate }.map { event in
+            ["title": event.title ?? "", "start": formatter.string(from: event.startDate),
+             "end": formatter.string(from: event.endDate), "all_day": event.isAllDay]
+        }
+    }
+
     static func calendarStatus() {
         guard let input = try? FileHandle.standardInput.readToEnd(),
               let payload = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
@@ -197,7 +222,8 @@ struct CalendarReader {
         let candidates = rows.compactMap { row -> Candidate? in
             guard let id = row["id"], let title = row["title"],
                   let start = row["start"].flatMap(parseDate) else { return nil }
-            return Candidate(id: id, title: title, start: start, url: row["url"] ?? "")
+            return Candidate(id: id, title: title, start: start,
+                             end: row["end"].flatMap(parseDate), url: row["url"] ?? "")
         }
         // Read each month once, even when the list shows many events.
         let monthFormatter = DateFormatter()
@@ -208,23 +234,34 @@ struct CalendarReader {
         }
         var present = Set<String>()
         var ambiguous = Set<String>()
+        var overlapsByID: [String: [[String: Any]]] = [:]
         for group in groups.values {
             guard let first = group.first,
                   let month = Calendar.current.dateInterval(of: .month, for: first.start) else {
                 continue
             }
+            let lastEnd = group.compactMap(\.end).max() ?? month.end
             let predicate = store.predicateForEvents(
                 withStart: month.start.addingTimeInterval(-duplicateWindowSeconds),
-                end: month.end.addingTimeInterval(duplicateWindowSeconds), calendars: [calendar])
-            let calendarEvents = store.events(matching: predicate).filter { $0.status != .canceled }
+                end: max(month.end, lastEnd).addingTimeInterval(duplicateWindowSeconds), calendars: nil)
+            let calendarEvents = store.events(matching: predicate)
+            let targetEvents = calendarEvents.filter {
+                $0.calendar.calendarIdentifier == calendar.calendarIdentifier && $0.status != .canceled
+            }
             for candidate in group {
-                let count = calendarEvents.filter { matches($0, candidate: candidate) }.count
-                if count > 0 { present.insert(candidate.id) }
+                let count = targetEvents.filter { matches($0, candidate: candidate) }.count
+                if count > 0 {
+                    present.insert(candidate.id)
+                } else {
+                    let overlapping = conflicts(calendarEvents, candidate: candidate)
+                    if !overlapping.isEmpty { overlapsByID[candidate.id] = overlapping }
+                }
                 if count > 1 { ambiguous.insert(candidate.id) }
             }
         }
         emit(["status": "available", "selector": calendarLabel(calendar),
-              "present_ids": present.sorted(), "ambiguous_ids": ambiguous.sorted()])
+              "present_ids": present.sorted(), "ambiguous_ids": ambiguous.sorted(),
+              "overlaps": overlapsByID])
     }
 
     static func parseDate(_ value: String) -> Date? {
@@ -257,16 +294,26 @@ struct CalendarReader {
                 emit(["status": status])
                 return
             }
-            let candidate = Candidate(id: id, title: title, start: start,
+            let candidate = Candidate(id: id, title: title, start: start, end: end,
                                       url: payload["url"] ?? "")
             let nearby = store.predicateForEvents(
                 withStart: start.addingTimeInterval(-duplicateWindowSeconds),
-                end: end.addingTimeInterval(duplicateWindowSeconds), calendars: [calendar])
-            if store.events(matching: nearby).contains(where: {
-                $0.status != .canceled && matches($0, candidate: candidate)
+                end: end.addingTimeInterval(duplicateWindowSeconds), calendars: nil)
+            let calendarEvents = store.events(matching: nearby)
+            if calendarEvents.contains(where: {
+                $0.calendar.calendarIdentifier == calendar.calendarIdentifier
+                    && $0.status != .canceled && matches($0, candidate: candidate)
             }) {
                 emit(["status": "already_added"])
                 return
+            }
+            // Warn before saving if a conflict appeared or the user entered an end time.
+            if payload["allow_overlap"] != "1" {
+                let overlapping = conflicts(calendarEvents, candidate: candidate)
+                if !overlapping.isEmpty {
+                    emit(["status": "overlap", "events": overlapping])
+                    return
+                }
             }
             let event = EKEvent(eventStore: store)
             event.calendar = calendar
@@ -310,7 +357,7 @@ struct CalendarReader {
                 emit(["status": status])
                 return
             }
-            let candidate = Candidate(id: id, title: title, start: start,
+            let candidate = Candidate(id: id, title: title, start: start, end: nil,
                                       url: payload["url"] ?? "")
             // Limit removal to one matching occurrence in the selected calendar.
             let nearby = store.predicateForEvents(

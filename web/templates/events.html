@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import badge, fit_filter, source_filter %}
+{% from "macros.html" import badge, calendar_add_button, fit_filter, source_filter %}
 {% block content %}
 <header class="page-head">
   <div><p class="eyebrow">Deduplicated event store</p><h1>Events</h1><p class="lede">Search every unique event, inspect its source history, and change its facts or fit assessment.</p></div>
@@ -40,7 +40,12 @@
       <td>{{ badge(event.rank or 'unranked') }}</td>
       <td class="event-calendar-cell" id="calendar-cell-{{ event.id }}">
         <span class="calendar-added" data-calendar-added title="Already in the selected calendar"{% if event.id not in calendar_state.present_ids %} hidden{% endif %}>✓ Added</span>
-        <form method="post" action="/events/{{ event.id }}/calendar" data-calendar-add data-event-title="{{ event.title }}" data-event-start="{{ event.start[:16] }}"{% if not event.end %} data-needs-end{% endif %}{% if event.id in calendar_state.present_ids %} hidden{% endif %}><input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="button tiny calendar-add-button" type="submit"{% if not calendar_state.ready %} disabled title="{{ calendar_state.message }}"{% endif %}>Add</button></form>
+        <form method="post" action="/events/{{ event.id }}/calendar" data-calendar-add data-event-title="{{ event.title }}" data-event-start="{{ event.start[:16] }}"{% if not event.end %} data-needs-end{% endif %}{% if event.id in calendar_state.present_ids %} hidden{% endif %}>
+          <input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}">
+          <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          {% set overlap = calendar_state.get('overlaps', {}).get(event.id, '') %}
+          {{ calendar_add_button('calendar-overlap-' ~ event.id, 'Add', overlap, overlap and event.end, calendar_state.ready, tiny=true, message=calendar_state.message) }}
+        </form>
         <form method="post" action="/events/{{ event.id }}/calendar/remove" data-calendar-remove data-event-title="{{ event.title }}"{% if event.id not in calendar_state.present_ids %} hidden{% endif %}><input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}"><button class="calendar-remove-button" type="submit"{% if event.id in calendar_state.ambiguous_ids %} disabled title="Several calendar events match. Remove one in Apple Calendar."{% endif %}>Remove</button></form>
       </td>
     </tr>{% set day_group.previous = event.start_day %}{% else %}<tr><td colspan="7"><div class="empty">No events match these filters.</div></td></tr>{% endfor %}</tbody>
@@ -51,7 +56,11 @@
     <h2 id="calendar-end-title">Set an end time</h2>
     <p data-calendar-end-event></p>
     <label>End time ({{ calendar_timezone|default('event local time') }}) <input type="datetime-local" name="end" required></label>
-    <div class="calendar-dialog-actions"><button class="button secondary" type="button" data-calendar-end-cancel>Cancel</button><button class="button primary" type="submit">Add to Calendar</button></div>
+    <p data-calendar-end-status role="status" hidden></p>
+    <div class="calendar-dialog-actions">
+      <button class="button secondary" type="button" data-calendar-end-cancel>Cancel</button>
+      {{ calendar_add_button('calendar-end-overlap', 'Add to Calendar') }}
+    </div>
   </form>
 </dialog>
 {% endblock %}

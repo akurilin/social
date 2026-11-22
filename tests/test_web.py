@@ -954,6 +954,53 @@ class WebControlCenterTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 409)
                     save.assert_not_called()
 
+    def test_calendar_overlap_reaches_both_pages_and_requires_confirmation(self):
+        target = "Example Account/main"
+        path = "/events/{}".format(self.event_id)
+        date = self.dinner_day.isoformat()
+        conflict = {"title": "Dinner with <friends>", "all_day": False,
+                    "start": date + "T19:00:00-04:00", "end": date + "T20:30:00-04:00"}
+        ready = {"status": "available", "selector": target}
+
+        def calendar_helper(cache_path, mode, payload):
+            self.assertEqual(payload["calendar"], target)
+            if mode == "status":
+                return dict(ready, overlaps={self.event_id: [conflict]})
+            if mode == "check":
+                return ready
+            self.assertEqual(mode, "save")
+            self.assertEqual(payload["end"][:16], date + "T21:00")
+            if payload.get("allow_overlap") == "1":
+                return {"status": "saved"}
+            return {"status": "overlap", "events": [conflict]}
+
+        with patch.dict(os.environ, {"SOCIAL_APPLE_CALENDAR": target}), \
+                patch("web.calendar_write.run_calendar_helper", side_effect=calendar_helper):
+            for url in ("/events", path):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('aria-describedby="calendar-overlap-{}"'.format(self.event_id),
+                              response.text)
+                self.assertIn("calendar-add-warning", response.text)
+                self.assertIn("Dinner with &lt;friends&gt; · 7:00 PM–8:30 PM", response.text)
+                self.assertNotIn('name="allow_overlap"', response.text)
+
+            data = {"csrf_token": app.state.calendar_csrf_token, "end": date + "T21:00"}
+            headers = {"accept": "application/json"}
+            warning = self.client.post(path + "/calendar", data=data, headers=headers)
+            self.assertEqual(warning.status_code, 409)
+            self.assertIn("Dinner with <friends>", warning.json()["overlap"])
+            self.assertIsNone(app.state.repo.load_calendar_coverage())
+
+            detail = self.client.post(path + "/calendar", data=data)
+            self.assertEqual(detail.status_code, 409)
+            self.assertIn('value="{}T21:00"'.format(date), detail.text)
+            self.assertIn('name="allow_overlap" value="1"', detail.text)
+            added = self.client.post(path + "/calendar", data=dict(data, allow_overlap="1"),
+                                     headers=headers)
+            self.assertEqual(added.status_code, 200)
+            self.assertEqual(added.json()["state"], "saved")
+
     def test_event_list_marks_events_already_on_calendar(self):
         state = {"ready": True, "message": "Ready to save.",
                  "present_ids": {self.event_id}, "ambiguous_ids": set()}

@@ -18,7 +18,7 @@ from .models import SourceEditorInput
 from .calendar_coverage import refresh_coverage
 from .calendar_logs import read_logs
 from .calendar_write import (
-    CalendarWriteError, calendar_event_status, calendar_readiness,
+    ALLOW_OVERLAP, CalendarOverlap, CalendarWriteError, calendar_event_status, calendar_readiness,
     calendar_target, remove_event, save_event,
 )
 from .repository import PROBLEM_STATES, ROOT, Repository
@@ -539,7 +539,8 @@ def event_calendar(request: Request):
     )
 
 
-def event_detail_page(request, event, notice=None, error=None, target=None, readiness=None):
+def event_detail_page(request, event, notice=None, error=None, target=None, readiness=None,
+                      overlap=None, end_value="", return_to=""):
     target = calendar_target(repo(request).root) if target is None else target
     calendar_state = (calendar_event_status(repo(request).cache_path, target, [event])
                       if readiness is None else dict(
@@ -549,6 +550,7 @@ def event_detail_page(request, event, notice=None, error=None, target=None, read
         calendar_target=target, calendar_readiness=calendar_state,
         calendar_state=calendar_state,
         calendar_notice=notice, calendar_error=error,
+        calendar_overlap=overlap, calendar_end_value=end_value, calendar_return_to=return_to,
         calendar_csrf_token=request.app.state.calendar_csrf_token,
         calendar_timezone=repo(request).load_catalog().get("timezone") or "event local time",
     )
@@ -605,11 +607,24 @@ async def add_event_to_calendar(request: Request, event_id: str):
                 zone_name = repo(request).load_catalog().get("timezone")
                 zone = ZoneInfo(zone_name) if zone_name else start.tzinfo
                 end = end.replace(tzinfo=zone)
-            if end <= start:
+            if end.timestamp() <= start.timestamp():
                 raise ValueError("End time must follow start time")
-            state = save_event(repo(request).cache_path, target, event, end.isoformat())
+            state = save_event(
+                repo(request).cache_path, target, event, end.isoformat(),
+                allow_overlap=values.get("allow_overlap") == ALLOW_OVERLAP)
         except (ValueError, ZoneInfoNotFoundError):
             message = "Enter an end time after the event start."
+        except CalendarOverlap as warning:
+            message = "Calendar overlap. Review the Add button."
+            if wants_json:
+                return JSONResponse({"detail": message, "overlap": str(warning)},
+                                    status_code=status.HTTP_409_CONFLICT)
+            response = event_detail_page(
+                request, event, error=message, target=target, readiness=readiness,
+                overlap=str(warning), end_value=values.get("end", ""),
+                return_to=values.get("return_to", ""))
+            response.status_code = status.HTTP_409_CONFLICT
+            return response
         except CalendarWriteError as error:
             message = str(error)
         else:

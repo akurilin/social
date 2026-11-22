@@ -1,5 +1,6 @@
 """Change a crawler event in one configured Apple Calendar."""
 
+import datetime as dt
 import json
 import os
 import subprocess
@@ -10,10 +11,15 @@ from .calendar_coverage import CalendarCoverageError, build_calendar_reader
 
 CALENDAR_ENV = "SOCIAL_APPLE_CALENDAR"
 CALENDAR_TIMEOUT_SECONDS = 120
+ALLOW_OVERLAP = "1"
 
 
 class CalendarWriteError(Exception):
     """A calendar save error that is safe to show in the web page."""
+
+
+class CalendarOverlap(CalendarWriteError):
+    """The conflicting events to show before saving."""
 
 
 def calendar_target(root):
@@ -92,11 +98,29 @@ def calendar_readiness(cache_path, target):
     return readiness_response(response, target)
 
 
+def overlap_description(events):
+    # Show only titles and times from Apple Calendar.
+    lines = ["Overlaps with"]
+    for event in events:
+        start = dt.datetime.fromisoformat(event["start"])
+        end = dt.datetime.fromisoformat(event["end"])
+        if event["all_day"]:
+            schedule = "All day"
+        else:
+            time_format = "%I:%M %p"
+            if start.date() != end.date():
+                time_format = "%b %d, " + time_format
+            schedule = "{}–{}".format(
+                start.strftime(time_format).lstrip("0"), end.strftime(time_format).lstrip("0"))
+        lines.append("{} · {}".format(event["title"] or "Busy", schedule))
+    return "\n".join(lines)
+
+
 def calendar_event_status(cache_path, target, events):
     if not target:
-        return dict(readiness_response({}, target), present_ids=set(), ambiguous_ids=set())
+        return dict(readiness_response({}, target), present_ids=set(), ambiguous_ids=set(), overlaps={})
     candidates = [
-        {key: event.get(key) or "" for key in ("id", "title", "start", "url")}
+        {key: event.get(key) or "" for key in ("id", "title", "start", "end", "url")}
         for event in events
     ]
     try:
@@ -104,16 +128,19 @@ def calendar_event_status(cache_path, target, events):
             cache_path, "status", {"calendar": target, "events": candidates})
     except CalendarWriteError as error:
         return {"ready": False, "message": str(error),
-                "present_ids": set(), "ambiguous_ids": set()}
+                "present_ids": set(), "ambiguous_ids": set(), "overlaps": {}}
     readiness = readiness_response(response, target)
     return dict(
         readiness,
         present_ids=set(response.get("present_ids") or []) if readiness["ready"] else set(),
         ambiguous_ids=set(response.get("ambiguous_ids") or []) if readiness["ready"] else set(),
+        overlaps={event_id: overlap_description(events)
+                  for event_id, events in (response.get("overlaps") or {}).items()}
+        if readiness["ready"] else {},
     )
 
 
-def save_event(cache_path, target, event, end):
+def save_event(cache_path, target, event, end, *, allow_overlap=False):
     # Resolve the target in EventKit so a changed Mac account cannot redirect a save.
     payload = {
         "calendar": target, "id": event["id"], "title": event["title"],
@@ -121,10 +148,14 @@ def save_event(cache_path, target, event, end):
         "location": ", ".join(part for part in (event["venue"], event["address"]) if part),
         "description": event["description"], "url": event["url"],
     }
+    if allow_overlap:
+        payload["allow_overlap"] = ALLOW_OVERLAP
     response = run_calendar_helper(cache_path, "save", payload)
     state = response.get("status")
     if state in {"saved", "already_added"}:
         return state
+    if state == "overlap":
+        raise CalendarOverlap(overlap_description(response["events"]))
     messages = {
         "denied": "Allow calendar access in macOS System Settings, then try again.",
         "no_calendars": "No Apple calendars are available. Add your account in Calendar.",

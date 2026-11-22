@@ -2,6 +2,13 @@
   <span class="badge badge-{{ (value or 'unknown')|replace('_', '-') }}">{{ (value or 'unknown')|replace('_', ' ') }}</span>
 {%- endmacro %}
 
+{% macro calendar_add_button(tooltip_id, label, overlap='', allow_overlap=false, ready=true, tiny=false, message='', autofocus=false) -%}
+  <button class="button calendar-add-button{% if tiny %} tiny{% endif %}{% if overlap %} calendar-add-warning{% endif %}" type="submit"{% if not ready %} disabled aria-disabled="true" title="{{ message }}"{% endif %}{% if overlap %} aria-describedby="{{ tooltip_id }}"{% endif %}{% if allow_overlap %} name="allow_overlap" value="1"{% endif %}{% if autofocus %} autofocus{% endif %}>
+    <span data-calendar-add-label>{{ label }}</span><span class="calendar-warning-icon" aria-hidden="true"{% if not overlap %} hidden{% endif %}>!</span>
+  </button>
+  <span class="calendar-add-tooltip" id="{{ tooltip_id }}" role="tooltip" popover="manual">{{ overlap }}</span>
+{%- endmacro %}
+
 {% macro fit_filter(rank) -%}
   <label><span>Fit</span><select name="rank">
     <option value="">Any rank</option>

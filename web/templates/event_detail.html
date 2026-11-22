@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import badge %}
+{% from "macros.html" import badge, calendar_add_button %}
 {% block content %}
 <header class="page-head">
   <div>
@@ -28,9 +28,11 @@
 <section class="alert info calendar-save" aria-label="Add to calendar">
   <form method="post" action="/events/{{ event.id }}/calendar">
     <input type="hidden" name="csrf_token" value="{{ calendar_csrf_token }}">
+    {% if calendar_return_to %}<input type="hidden" name="return_to" value="{{ calendar_return_to }}">{% endif %}
     <div><strong>Add to Calendar</strong><span>{{ calendar_readiness.message }}</span>{% if not calendar_readiness.ready %}<small>See <code>sample.env</code> for setup.</small>{% endif %}</div>
-    {% if not event.end %}<label>End time ({{ calendar_timezone }}) <input type="datetime-local" name="end" required{% if not calendar_readiness.ready %} disabled{% endif %}><small>This event has no end time. Enter one before you save it.</small></label>{% endif %}
-    <button class="button primary" type="submit"{% if not calendar_readiness.ready %} disabled aria-disabled="true"{% endif %}>Add to Calendar</button>
+    {% if not event.end %}<label>End time ({{ calendar_timezone }}) <input type="datetime-local" name="end" value="{{ calendar_end_value }}" required{% if not calendar_readiness.ready %} disabled{% endif %}><small>This event has no end time. Enter one before you save it.</small></label>{% endif %}
+    {% set overlap = calendar_overlap or calendar_state.get('overlaps', {}).get(event.id, '') %}
+    {{ calendar_add_button('calendar-overlap-' ~ event.id, 'Add to Calendar', overlap, calendar_overlap or (overlap and event.end), calendar_readiness.ready, message=calendar_readiness.message, autofocus=calendar_overlap) }}
   </form>
 </section>
 {% endif %}
