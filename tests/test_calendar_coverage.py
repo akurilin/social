@@ -353,14 +353,17 @@ class CalendarCoveragePageTests(unittest.TestCase):
         app.state.repo = self.original_repo
         self.temp.cleanup()
 
-    def test_both_pages_show_all_days_and_only_manual_refresh(self):
+    def test_both_pages_hide_social_plans_and_skip_automatic_refresh(self):
         with patch("web.calendar_coverage.read_apple_calendar") as read:
             for path in ("/events", "/calendar"):
                 page = self.client.get(path)
                 self.assertEqual(page.status_code, 200)
-                self.assertIn("Refresh calendar", page.text)
-                self.assertEqual(page.text.count('class="coverage-date"'), COVERAGE_DAYS)
-                self.assertIn("coverage-unknown", page.text)
+                document = BeautifulSoup(page.text, "html.parser")
+                panel = document.select_one("[data-calendar-coverage][hidden]")
+                self.assertIsNotNone(panel)
+                self.assertIn("Refresh calendar", panel.get_text())
+                self.assertEqual(len(panel.select(".coverage-tile.coverage-unknown")),
+                                 COVERAGE_DAYS)
         read.assert_not_called()
 
     def test_logs_are_accessible_from_calendar(self):

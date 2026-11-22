@@ -37,11 +37,12 @@ Events and Calendar each save filter selections in your browser. Calendar also
 saves the month; Events saves search and sort order. Explicit filter URLs take
 priority. Select **Reset filters** to restore that page's defaults.
 
-The Events and Calendar pages show social plans for today and the next 13 days.
+The Social plans panel is hidden on the Events and Calendar pages. The panel
+covers today and the next 13 days. When it is visible, select **Refresh calendar**
+to read Apple Calendar and check the events with GPT-5.6 Luna, or Claude Sonnet
+if Codex CLI is not installed.
 Select **Stop refresh** during a check to stop it and keep the last saved result.
 
-Select **Refresh calendar** to read Apple Calendar and check the events with
-GPT-5.6 Luna, or Claude Sonnet if Codex CLI is not installed.
 Green means a social plan; red means no social plan was found.
 Pastel blue means unchecked or unavailable. Time in cafés, libraries and hotel
 bars counts, including solo work, study or reading. Online events and
@@ -92,8 +93,7 @@ Other calendar edits need another refresh.
 
 ### Calendar diagnostics
 
-Select **View logs** beside the calendar check, or open
-`http://127.0.0.1:8000/calendar-coverage/logs`.
+Open `http://127.0.0.1:8000/calendar-coverage/logs` to view the calendar check logs.
 Logs start with the next refresh; earlier errors cannot be recovered.
 
 Each refresh has a run ID. Logs record calendar reads, client version and
