@@ -1,6 +1,6 @@
 ---
 name: add-source
-description: Add or update an event source in the social crawler's sources.json catalog. Use when the agent must investigate a new event source, choose its retrieval profile, add or change its catalog entry through the repository layer, disable it, or validate the source catalog for any configured location.
+description: Add an event source, change its retrieval settings, or validate the social crawler's sources.json catalog.
 ---
 
 # Add a source to the event crawler catalog
@@ -115,7 +115,7 @@ source ID and run history.
 - Use the deepest stable page that lists events.
 - Use priority 1 for proven high-value sources, 2 for normal sources, and 3 for low-volume or unproven sources.
 - Write `parse_hint` for a future agent. State the page structure, priorities, empty signal, overlap, and traps.
-- Do not set `enabled: false` on a new source. Disabling an existing source requires a `disabled_reason` that says what would justify re-enabling it.
+- Do not set `enabled: false` on a new source.
 
 ### 7. Get confirmation
 
@@ -164,5 +164,4 @@ Tell the user what changed, which retrieval profile you chose and why, that it w
 
 ## Other source changes
 
-- To disable a source, set `enabled: false` and add a `disabled_reason` that says what would justify re-enabling it.
 - Do not delete a source with history unless the user explicitly asks for complete removal. Otherwise, prefer disabling it or moving it to `removed` with a reason.
